@@ -1,29 +1,45 @@
 # 노트 메모 (note_memo)
 
 날짜별로 노트가 한 장씩 생기는 윈도우용 다이어리 앱.
-**Win+Shift+S 로 캡쳐 → Ctrl+V** 두 단계로 필기 중인 위치에 스크린샷이 바로 들어갑니다.
+**`Win`+`Shift`+`S` 로 캡쳐 → `Ctrl`+`V`** 두 단계로, 필기 중인 자리에 스크린샷이 바로 들어갑니다.
+
+![앱 화면](docs/screenshot-main.png)
+
+종이 다이어리 느낌의 화면에 텍스트·서식·스크린샷을 한곳에 모읍니다.
+외부 의존성은 **PySide6 하나뿐**입니다 — 클립보드 이미지를 Qt가 직접 처리하므로
+이미지 라이브러리도 필요 없습니다.
 
 ## 실행
 
-바탕화면의 **노트 메모** 바로가기를 더블클릭하면 됩니다.
+```bash
+git clone https://github.com/ssibseggi-dev/note_memo.git
+```
 
-바로가기를 다시 만들려면:
+받은 폴더의 **`run.bat`** 을 더블클릭하세요.
+처음 한 번만 가상환경을 만들고 PySide6를 설치하며, 그 뒤로는 콘솔 창 없이 바로 뜹니다.
+(윈도우 10/11 + 파이썬 3.10 이상)
+
+명령으로 실행하려면:
+
+```bash
+.venv\Scripts\python.exe main.py
+```
+
+파이썬이 없는 컴퓨터에 넘길 단일 실행 파일은 아래 **배포용 실행 파일 만들기** 를 보세요.
+
+<details>
+<summary>바탕화면 바로가기 만들기</summary>
 
 ```bash
 powershell -ExecutionPolicy Bypass -File tools\create_shortcut.ps1
 ```
 
-바로가기 없이 실행하려면 `run.bat` 을 더블클릭합니다. 처음 실행할 때만 가상환경을 만들고
-PySide6를 설치하며, 그 뒤로는 콘솔 창 없이 바로 뜹니다.
+`pythonw.exe` 를 직접 가리켜 콘솔 창 없이 뜨고 아이콘도 붙습니다.
 
-> `run.bat` 은 **반드시 CRLF 줄바꿈으로 저장**해야 합니다. LF로 저장하면 cmd.exe가 여러 줄을
-> 한 줄로 붙여 읽어서 아무 일도 일어나지 않습니다.
+> `run.bat` 은 **반드시 CRLF 줄바꿈**이어야 합니다. LF로 저장하면 cmd.exe가 여러 줄을
+> 한 줄로 붙여 읽어서 아무 일도 일어나지 않습니다. `.gitattributes` 로 못박아 뒀습니다.
 
-직접 실행하려면:
-
-```bash
-.venv\Scripts\python.exe main.py
-```
+</details>
 
 앱이 조용히 죽으면 `문서\NoteMemo\error.log` 에 원인이 남습니다
 (`pythonw.exe` 로 띄우면 콘솔이 없어 오류가 화면에 나오지 않기 때문입니다).
@@ -38,6 +54,15 @@ PySide6를 설치하며, 그 뒤로는 콘솔 창 없이 바로 뜹니다.
 **두 장을 같은 줄에 나란히** 둘 수 있습니다.
 **원본 해상도 PNG는 따로 보관**되므로 이미지를 더블클릭하면 기본 뷰어에서 원본 크기로 열립니다.
 이미지 파일을 복사하거나 창으로 끌어다 놓아도 똑같이 들어갑니다.
+
+## 서식
+
+![서식 툴바](docs/screenshot-toolbar.png)
+
+왼쪽부터 글자 크기 · 굵게 · 기울임 · 밑줄 · 취소선 · 형광펜(3색) · 체크박스 · 목록 ·
+정렬 · 내어쓰기 · 들여쓰기 · 서식 지우기, 오른쪽 끝이 저장 버튼입니다.
+`▾` 가 붙은 것은 눌러서 고르는 드롭다운이고, 나머지는 켜고 끄는 토글입니다.
+버튼에 마우스를 올리면 이름과 단축키가 나옵니다.
 
 ## 단축키
 
@@ -107,6 +132,9 @@ PySide6를 설치하며, 그 뒤로는 콘솔 창 없이 바로 뜹니다.
 ## 저장 방식
 
 편집을 멈추면 1.5초 뒤 자동 저장되고, 날짜를 옮기거나 창을 닫을 때도 저장됩니다.
+
+![저장 버튼](docs/screenshot-save.png)
+
 툴바 오른쪽의 **저장 버튼**은 저장할 게 있으면 진해지고 저장을 마치면 흐려져서,
 버튼만 봐도 지금 저장된 상태인지 알 수 있습니다.
 저장 위치는 `문서\NoteMemo\` 입니다.
@@ -226,6 +254,7 @@ QT_QPA_PLATFORM=windows .venv/Scripts/python.exe -m tests.preview_shot preview.p
 | `notememo/layout.py` | 본문 단 폭에 맞춰 끝나는 가로줄 (헤더·툴바·상태줄 공용) |
 | `notememo/main_window.py` | 조립, 자동저장, 단축키 |
 | `tools/build_exe.py` | 배포용 단일 실행 파일 빌드 |
+| `tools/make_screenshots.py` | README 용 화면 이미지(`docs/`) 생성 |
 | `tools/convert_space_indent.py` | 공백으로 맞춘 들여쓰기를 `indent` 로 변환 (기본은 미리보기) |
 | `tools/make_icon.py` | 바로가기 아이콘(`assets/note_memo.ico`) 생성 |
 | `tools/create_shortcut.ps1` | 바탕화면 바로가기 생성 |
