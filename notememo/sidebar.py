@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QVBoxLayout,
     QWidget,
 )
@@ -27,8 +28,25 @@ def _to_date(qdate: QDate) -> _dt.date:
     return _dt.date(qdate.year(), qdate.month(), qdate.day())
 
 
+class _NoteListWidget(QListWidget):
+    """Delete 키로 선택된 노트를 삭제할 수 있는 리스트 위젯."""
+
+    deletePressed = Signal(object)
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_Delete:
+            item = self.currentItem()
+            if item:
+                date = item.data(Qt.ItemDataRole.UserRole)
+                if isinstance(date, _dt.date):
+                    self.deletePressed.emit(date)
+                    return
+        super().keyPressEvent(event)
+
+
 class Sidebar(QWidget):
     dateSelected = Signal(object)   # datetime.date
+    deleteRequested = Signal(object)  # datetime.date
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -62,11 +80,14 @@ class Sidebar(QWidget):
         self.list_label.setObjectName("SectionLabel")
         layout.addWidget(self.list_label)
 
-        self.note_list = QListWidget(self)
+        self.note_list = _NoteListWidget(self)
         self.note_list.setObjectName("NoteList")
         self.note_list.setUniformItemSizes(False)
         self.note_list.setWordWrap(True)
         self.note_list.itemClicked.connect(self._on_item_clicked)
+        self.note_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.note_list.customContextMenuRequested.connect(self._show_context_menu)
+        self.note_list.deletePressed.connect(self.deleteRequested.emit)
         layout.addWidget(self.note_list, 1)
 
         self._dates: list[_dt.date] = []
@@ -137,3 +158,22 @@ class Sidebar(QWidget):
         date = item.data(Qt.ItemDataRole.UserRole)
         if isinstance(date, _dt.date):
             self.dateSelected.emit(date)
+
+    def _show_context_menu(self, pos) -> None:
+        item = self.note_list.itemAt(pos)
+        if not item:
+            return
+        date = item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(date, _dt.date):
+            return
+
+        self.note_list.setCurrentItem(item)
+        menu = QMenu(self)
+        open_action = menu.addAction("노트 열기")
+        delete_action = menu.addAction("노트 삭제")
+
+        action = menu.exec(self.note_list.viewport().mapToGlobal(pos))
+        if action == open_action:
+            self.dateSelected.emit(date)
+        elif action == delete_action:
+            self.deleteRequested.emit(date)

@@ -6,16 +6,24 @@
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPointF, QUrl, Qt
 from PySide6.QtGui import (
     QColor,
     QFont,
+    QImage,
+    QPainter,
+    QPen,
+    QPolygonF,
     QTextBlockFormat,
     QTextCharFormat,
     QTextCursor,
+    QTextFormat,
+    QTextImageFormat,
+    QTextLength,
     QTextListFormat,
 )
 
@@ -26,6 +34,18 @@ TEXT = "text"
 BULLET = "bullet"
 TODO = "todo"
 IMAGE = "image"
+DIVIDER = "divider"
+
+DIVIDER_PROP = QTextFormat.Property.UserProperty + 10
+DIVIDER_STYLE_PROP = QTextFormat.Property.UserProperty + 11
+
+DEFAULT_DIVIDER_STYLE = "dashed"
+DIVIDER_STYLES = [
+    ("dashed", "점선 구분선  (---)"),
+    ("solid", "실선 구분선  (───)"),
+    ("bold", "굵은 구분선  (━━━)"),
+    ("double", "이중선 구분선  (═══)"),
+]
 
 LIST_TYPES = (BULLET, TODO)
 _MARKER = QTextBlockFormat.MarkerType
@@ -48,6 +68,10 @@ ALIGN_LABELS = [
 
 # --- 문자 서식 -----------------------------------------------------
 
+STAR_RED = "#E61B1B"        # 손글씨 느낌의 빨간 별표 강조 색상
+DEFAULT_STAR = "☆"
+
+
 def char_format(
     *,
     size: int | None = None,
@@ -56,6 +80,7 @@ def char_format(
     underline: bool = False,
     strike: bool = False,
     highlight: str | None = None,
+    color: str | None = None,
 ) -> QTextCharFormat:
     """run 플래그로부터 QTextCharFormat을 만든다. 글꼴은 항상 본문 글꼴이다."""
     fmt = QTextCharFormat()
@@ -67,6 +92,8 @@ def char_format(
     fmt.setFontStrikeOut(strike)
     if highlight:
         fmt.setBackground(QColor(highlight))
+    if color:
+        fmt.setForeground(QColor(color))
     return fmt
 
 
@@ -84,6 +111,11 @@ def read_char_flags(fmt: QTextCharFormat) -> dict[str, Any]:
     brush = fmt.background()
     if brush.style() != Qt.BrushStyle.NoBrush and brush.color().alpha() > 0:
         flags["hl"] = brush.color().name().upper()
+    fg = fmt.foreground()
+    if fg.style() != Qt.BrushStyle.NoBrush and fg.color().isValid() and fg.color().alpha() > 0:
+        hex_color = fg.color().name().upper()
+        if hex_color != theme.PALETTE["ink"].upper():
+            flags["c"] = hex_color
 
     # Qt는 크기 미설정을 0 이나 -1 로 돌려준다. 기본값이면 키를 넣지 않는다.
     point = round(fmt.fontPointSize())
@@ -101,6 +133,7 @@ def flags_to_kwargs(flags: dict[str, Any]) -> dict[str, Any]:
         "underline": bool(flags.get("u")),
         "strike": bool(flags.get("s")),
         "highlight": flags.get("hl"),
+        "color": flags.get("c"),
     }
 
 
@@ -122,11 +155,25 @@ def block_format(
     image: bool = False,
     align: str = LEFT,
     indent: int = 0,
+    divider_style: str = DEFAULT_DIVIDER_STYLE,
 ) -> QTextBlockFormat:
     proportional = QTextBlockFormat.LineHeightTypes.ProportionalHeight.value
     fmt = QTextBlockFormat()
     fmt.setAlignment(ALIGNMENTS.get(align, ALIGNMENTS[LEFT]))
     fmt.setIndent(clamp_indent(indent))
+    if block_type == DIVIDER:
+        fmt.setProperty(
+            QTextFormat.Property.BlockTrailingHorizontalRulerWidth,
+            QTextLength(QTextLength.Type.PercentageLength, 100),
+        )
+        fmt.setBackground(QColor(0, 0, 0, 0))
+        fmt.setProperty(DIVIDER_PROP, True)
+        fmt.setProperty(DIVIDER_STYLE_PROP, divider_style)
+        fmt.setTopMargin(10)
+        fmt.setBottomMargin(10)
+        fmt.setLineHeight(100, proportional)
+        fmt.setMarker(_MARKER.NoMarker)
+        return fmt
     if image:
         # 이미지 줄에 본문 줄간격(170%)을 주면 이미지 높이의 70%만큼 빈 공간이 생긴다.
         fmt.setLineHeight(100, proportional)
@@ -146,11 +193,23 @@ def block_format(
 def read_block_type(block) -> tuple[str, bool]:
     """(타입, 체크 여부)."""
     fmt = block.blockFormat()
+    if (
+        fmt.boolProperty(DIVIDER_PROP)
+        or fmt.hasProperty(QTextFormat.Property.BlockTrailingHorizontalRulerWidth)
+    ) and not block.text():
+        return DIVIDER, False
     if block.textList() is not None:
         if fmt.marker() != _MARKER.NoMarker:
             return TODO, fmt.marker() == _MARKER.Checked
         return BULLET, False
     return TEXT, False
+
+
+def read_divider_style(block) -> str:
+    """구분선 블록의 스타일(dashed, solid, bold, double)."""
+    fmt = block.blockFormat()
+    style = fmt.property(DIVIDER_STYLE_PROP)
+    return str(style) if style in ("dashed", "solid", "bold", "double") else DEFAULT_DIVIDER_STYLE
 
 
 def read_align(block) -> str:
@@ -185,10 +244,11 @@ def step_indent(editor, delta: int) -> None:
     worker = QTextCursor(document)
     worker.beginEditBlock()
     while block.isValid():
-        only_indent = QTextBlockFormat()
-        only_indent.setIndent(clamp_indent(read_indent(block) + delta))
-        worker.setPosition(block.position())
-        worker.mergeBlockFormat(only_indent)
+        if read_block_type(block)[0] != DIVIDER:
+            only_indent = QTextBlockFormat()
+            only_indent.setIndent(clamp_indent(read_indent(block) + delta))
+            worker.setPosition(block.position())
+            worker.mergeBlockFormat(only_indent)
         if block == last:
             break
         block = block.next()
@@ -243,6 +303,7 @@ def apply_block_type(
     start, end = sorted((cursor.selectionStart(), cursor.selectionEnd()))
     block = doc.findBlock(start)
     last = doc.findBlock(end)
+    cursor_kwargs = flags_to_kwargs(read_char_flags(cursor.charFormat()))
 
     worker = QTextCursor(doc)
     worker.beginEditBlock()
@@ -268,12 +329,19 @@ def apply_block_type(
         if block_type in LIST_TYPES:
             worker.createList(list_format())
 
-        # 글꼴은 블록 서식과 무관하게 다시 입혀 문서를 정규화한다.
-        for kwargs, frag_start, frag_end in spans:
-            span = QTextCursor(doc)
-            span.setPosition(frag_start)
-            span.setPosition(frag_end, QTextCursor.MoveMode.KeepAnchor)
-            span.setCharFormat(char_format(**kwargs))
+        if spans:
+            # 목록 불릿(●) 크기는 blockCharFormat 을 따르므로 첫 글자 크기에 맞춘다.
+            worker.setBlockCharFormat(char_format(size=spans[0][0].get("size")))
+            # 글꼴은 블록 서식과 무관하게 다시 입혀 문서를 정규화한다.
+            for kwargs, frag_start, frag_end in spans:
+                span = QTextCursor(doc)
+                span.setPosition(frag_start)
+                span.setPosition(frag_end, QTextCursor.MoveMode.KeepAnchor)
+                span.setCharFormat(char_format(**kwargs))
+        else:
+            # 빈 줄에서 목록을 켤 때도 현재 지정한 글자 크기·서식을 유지한다.
+            worker.setBlockCharFormat(char_format(size=cursor_kwargs.get("size")))
+            worker.setCharFormat(char_format(**cursor_kwargs))
 
         if block == last:
             break
@@ -284,8 +352,33 @@ def apply_block_type(
 # --- 토글 (에디터 대상) --------------------------------------------
 
 def _merge(editor, fmt: QTextCharFormat) -> None:
-    """선택 영역이 있으면 선택 영역에, 없으면 다음 입력 서식에 적용된다."""
+    """선택 영역이 있으면 선택 영역에, 없으면 다음 입력 서식에 적용된다.
+
+    빈 문단이거나 선택 영역이 문단 첫 글자를 포함하면 blockCharFormat 도 함께
+    갱신해야 목록 불릿(●) 크기가 본문 글자 크기와 어긋나지 않고, 첫 글자를 지우거나
+    목록을 시작할 때 이전 문단의 서식(큰 글자 등)으로 되돌아가지 않는다.
+    """
+    cursor = editor.textCursor()
+    cursor.beginEditBlock()
+    if not cursor.hasSelection():
+        if cursor.positionInBlock() == 0:
+            cursor.mergeBlockCharFormat(fmt)
+    else:
+        doc = cursor.document()
+        start, end = sorted((cursor.selectionStart(), cursor.selectionEnd()))
+        block = doc.findBlock(start)
+        last = doc.findBlock(end)
+        worker = QTextCursor(doc)
+        while block.isValid():
+            first_visible = block.position() + (len(block.text()) - len(block.text().lstrip()))
+            if start <= first_visible:
+                worker.setPosition(block.position())
+                worker.mergeBlockCharFormat(fmt)
+            if block == last:
+                break
+            block = block.next()
     editor.mergeCurrentCharFormat(fmt)
+    cursor.endEditBlock()
 
 
 def selection_char_format(editor) -> QTextCharFormat:
@@ -372,14 +465,22 @@ def step_size(editor, delta: int) -> None:
 def toggle_block_type(editor, block_type: str) -> None:
     """이미 그 타입이면 본문으로 되돌린다."""
     cursor = editor.textCursor()
+    saved_kwargs = flags_to_kwargs(read_char_flags(editor.currentCharFormat()))
+    if not cursor.hasSelection() and not cursor.block().text():
+        cursor.setCharFormat(char_format(**saved_kwargs))
     current, _ = read_block_type(cursor.block())
     apply_block_type(cursor, TEXT if current == block_type else block_type)
+    if not cursor.hasSelection():
+        editor.setCurrentCharFormat(char_format(**saved_kwargs))
 
 
 def clear_formatting(editor) -> None:
     cursor = editor.textCursor()
     cursor.beginEditBlock()
     if cursor.hasSelection():
+        cursor.setCharFormat(char_format())
+    else:
+        cursor.setBlockCharFormat(char_format())
         cursor.setCharFormat(char_format())
     apply_block_type(cursor, TEXT, keep_layout=False)   # 정렬·들여쓰기도 되돌린다
     cursor.endEditBlock()
@@ -396,11 +497,130 @@ def toggle_checked(block) -> None:
     QTextCursor(block).mergeBlockFormat(marker_only)
 
 
+def insert_divider(editor, style: str = DEFAULT_DIVIDER_STYLE) -> None:
+    """커서 위치에 구분선을 삽입하고 바로 아래에 본문 문단을 생성하여 입력을 이어간다."""
+    cursor = editor.textCursor()
+    cursor.beginEditBlock()
+    block = cursor.block()
+    block_type, _ = read_block_type(block)
+
+    # 현재 줄에 글자가 있거나 목록/체크박스인 경우 새 줄을 열어 구분선을 넣는다.
+    if block.text() or block_type != TEXT:
+        cursor.insertBlock()
+
+    cursor.setBlockFormat(block_format(DIVIDER, divider_style=style))
+    if cursor.block().textList() is not None:
+        cursor.block().textList().remove(cursor.block())
+
+    # 구분선 바로 아래에 일반 본문 줄을 만들어 이어서 타이핑할 수 있게 한다.
+    cursor.insertBlock()
+    cursor.setBlockFormat(block_format(TEXT))
+    cursor.setCharFormat(char_format())
+    cursor.endEditBlock()
+
+    editor.setTextCursor(cursor)
+    editor.setCurrentCharFormat(char_format())
+    editor.ensureCursorVisible()
+
+
+BUILTIN_STAR_SKETCH = "builtin:star_sketch"
+BUILTIN_STAR_FILLED = "builtin:star_filled"
+
+
+def make_star_image(filled: bool = False, color: str = STAR_RED, px: int = 48) -> QImage:
+    """고해상도 스케치 스타일 또는 채움 스타일의 빨간 별표 QImage 생성."""
+    scale = 3.0
+    total = int(px * scale)
+    img = QImage(total, total, QImage.Format.Format_ARGB32_Premultiplied)
+    img.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(img)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.scale(scale, scale)
+    cx, cy = px / 2.0, px / 2.0
+    r_out = px * 0.44
+    if filled:
+        r_in = px * 0.19
+        points = [
+            QPointF(
+                cx + (r_out if i % 2 == 0 else r_in) * math.cos(-math.pi / 2 + i * math.pi / 5),
+                cy + (r_out if i % 2 == 0 else r_in) * math.sin(-math.pi / 2 + i * math.pi / 5),
+            )
+            for i in range(10)
+        ]
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(color))
+        painter.drawPolygon(QPolygonF(points))
+    else:
+        # 손글씨로 쓱쓱 그은 5점 별 (스케치 스타일)
+        points = [
+            QPointF(
+                cx + r_out * math.cos(-math.pi / 2 + i * 4 * math.pi / 5),
+                cy + r_out * math.sin(-math.pi / 2 + i * 4 * math.pi / 5),
+            )
+            for i in range(6)
+        ]
+        pen = QPen(QColor(color))
+        pen.setWidthF(px * 0.08)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        painter.drawPolyline(points)
+    painter.end()
+    return img
+
+
+def register_star_resources(doc) -> None:
+    """문서에 스케치 별표 인라인 이미지 리소스를 등록한다."""
+    resource_type = doc.ResourceType.ImageResource
+    doc.addResource(resource_type, QUrl(BUILTIN_STAR_SKETCH), make_star_image(filled=False))
+    doc.addResource(resource_type, QUrl(BUILTIN_STAR_FILLED), make_star_image(filled=True))
+
+
+def insert_star_run(cursor: QTextCursor, star_type: str = "sketch", size: int | float | None = None) -> None:
+    """커서 위치에 인라인 별표 이미지를 삽입한다."""
+    doc = cursor.document()
+    register_star_resources(doc)
+    pt = size or round(cursor.charFormat().fontPointSize()) or theme.BODY_PT
+    px = max(14, round(pt * 1.35))
+
+    img_fmt = QTextImageFormat()
+    img_fmt.setName(BUILTIN_STAR_FILLED if star_type == "filled" else BUILTIN_STAR_SKETCH)
+    img_fmt.setWidth(px)
+    img_fmt.setHeight(px)
+    img_fmt.setVerticalAlignment(QTextImageFormat.VerticalAlignment.AlignMiddle)
+    if pt != theme.BODY_PT:
+        img_fmt.setFontPointSize(theme.clamp_size(pt))
+    cursor.insertImage(img_fmt)
+
+
+def insert_red_star(editor, star_type: str = "sketch") -> None:
+    """커서 위치(또는 선택 앞)에 손글씨 스케치 느낌의 빨간 별표를 삽입한다."""
+    cursor = editor.textCursor()
+    cursor.beginEditBlock()
+    cur_sz = current_size(editor)
+
+    if cursor.hasSelection():
+        cursor.setPosition(cursor.selectionStart())
+
+    insert_star_run(cursor, star_type=star_type, size=cur_sz)
+
+    # 별표 뒤에 공백 하나를 넣고 본문 입력 서식을 복원
+    reset_fmt = char_format(size=cur_sz)
+    cursor.setCharFormat(reset_fmt)
+    cursor.insertText(" ", reset_fmt)
+    cursor.endEditBlock()
+
+    editor.setTextCursor(cursor)
+    editor.setCurrentCharFormat(reset_fmt)
+    editor.ensureCursorVisible()
+
+
 # --- 마크다운식 자동 서식 ------------------------------------------
 
 _AUTOFORMAT = [
     (re.compile(r"^[-*]$"), BULLET),
     (re.compile(r"^\[\s?\]$"), TODO),
+    (re.compile(r"^(?:-{3,}|\*{3,}|_{3,})$"), DIVIDER),
 ]
 
 
@@ -419,6 +639,9 @@ def try_autoformat(editor) -> bool:
     for pattern, block_type in _AUTOFORMAT:
         if not pattern.match(prefix):
             continue
+        # 접두어('-')를 지우는 순간 빈 블록이 되어 blockCharFormat(이전 줄 크기)으로
+        # 돌아가 버리므로 현재 입력 서식을 보존해 다시 입힌다.
+        saved_kwargs = flags_to_kwargs(read_char_flags(editor.currentCharFormat()))
         # Ctrl+Z 한 번으로 되돌아가도록 하나의 undo 단위로 묶는다.
         cursor.beginEditBlock()
         cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock)
@@ -426,11 +649,45 @@ def try_autoformat(editor) -> bool:
             QTextCursor.MoveOperation.Right, QTextCursor.MoveMode.KeepAnchor, len(prefix)
         )
         cursor.removeSelectedText()
-        apply_block_type(cursor, block_type)
+        if block_type == DIVIDER:
+            cursor.setBlockFormat(block_format(DIVIDER))
+            cursor.insertBlock()
+            cursor.setBlockFormat(block_format(TEXT))
+            cursor.setCharFormat(char_format(**saved_kwargs))
+        else:
+            cursor.setCharFormat(char_format(**saved_kwargs))
+            apply_block_type(cursor, block_type)
         cursor.endEditBlock()
         editor.setTextCursor(cursor)
+        editor.setCurrentCharFormat(char_format(**saved_kwargs))
         return True
     return False
+
+
+def try_divider_autoformat_on_enter(editor) -> bool:
+    """줄 전체가 '---', '***', '___' (3개 이상)일 때 Enter를 누르면 구분선으로 치환."""
+    cursor = editor.textCursor()
+    if cursor.hasSelection():
+        return False
+    block = cursor.block()
+    if read_block_type(block)[0] != TEXT:
+        return False
+    text = block.text().strip()
+    if not re.match(r"^(?:-{3,}|\*{3,}|_{3,})$", text):
+        return False
+    saved_kwargs = flags_to_kwargs(read_char_flags(editor.currentCharFormat()))
+    cursor.beginEditBlock()
+    cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock)
+    cursor.movePosition(QTextCursor.MoveOperation.EndOfBlock, QTextCursor.MoveMode.KeepAnchor)
+    cursor.removeSelectedText()
+    cursor.setBlockFormat(block_format(DIVIDER))
+    cursor.insertBlock()
+    cursor.setBlockFormat(block_format(TEXT))
+    cursor.setCharFormat(char_format(**saved_kwargs))
+    cursor.endEditBlock()
+    editor.setTextCursor(cursor)
+    editor.setCurrentCharFormat(char_format(**saved_kwargs))
+    return True
 
 
 def try_list_exit(editor) -> bool:
@@ -441,5 +698,8 @@ def try_list_exit(editor) -> bool:
     block = cursor.block()
     if read_block_type(block)[0] not in LIST_TYPES or block.text():
         return False
+    saved_kwargs = flags_to_kwargs(read_char_flags(editor.currentCharFormat()))
+    cursor.setCharFormat(char_format(**saved_kwargs))
     apply_block_type(cursor, TEXT)
+    editor.setCurrentCharFormat(char_format(**saved_kwargs))
     return True

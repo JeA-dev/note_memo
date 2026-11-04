@@ -4,8 +4,15 @@ from __future__ import annotations
 
 import datetime as _dt
 
-from PySide6.QtCore import QTimer, QUrl, Qt, Signal
-from PySide6.QtGui import QColor, QDesktopServices, QImage, QTextCursor
+from PySide6.QtCore import QPointF, QTimer, QUrl, Qt, Signal
+from PySide6.QtGui import (
+    QColor,
+    QDesktopServices,
+    QImage,
+    QPainter,
+    QPen,
+    QTextCursor,
+)
 from PySide6.QtWidgets import QTextEdit
 
 from . import formatting as fmt
@@ -26,6 +33,7 @@ class NoteEditor(QTextEdit):
     """날짜 하나에 대응하는 필기 영역."""
 
     imagePasted = Signal()
+    filesDropped = Signal(list)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -44,6 +52,7 @@ class NoteEditor(QTextEdit):
         self._right_margin = -1
 
         self.document().setDocumentMargin(theme.DOC_MARGIN)
+        fmt.register_star_resources(self.document())
         self.setCurrentCharFormat(fmt.char_format())
 
         self._refit_timer = QTimer(self)
@@ -122,14 +131,11 @@ class NoteEditor(QTextEdit):
                 self.insert_image(image)
                 return
 
-        if source.hasUrls():                        # 이미지 파일 복사/드래그
-            for url in source.urls():
-                if not url.isLocalFile():
-                    continue
-                image = QImage(url.toLocalFile())
-                if not image.isNull():
-                    self.insert_image(image)
-                    return
+        if source.hasUrls():                        # 이미지 또는 파일 복사/드래그
+            local_files = [url.toLocalFile() for url in source.urls() if url.isLocalFile()]
+            if local_files:
+                self.filesDropped.emit(local_files)
+                return
 
         if source.hasFormat(RICH_MIME) and not self._force_plain:
             super().insertFromMimeData(source)      # 앱 내부 복사 - 서식 유지
@@ -192,7 +198,7 @@ class NoteEditor(QTextEdit):
                 char_fmt = it.fragment().charFormat()
                 if char_fmt.isImageFormat():
                     name = char_fmt.toImageFormat().name()
-                    if name:
+                    if name and not name.startswith("builtin:"):
                         names.append(name)
                 it += 1
             block = block.next()
@@ -234,6 +240,8 @@ class NoteEditor(QTextEdit):
                     continue
                 image_fmt = char_fmt.toImageFormat()
                 name = image_fmt.name()
+                if not name or name.startswith("builtin:"):
+                    continue
                 target = serializer.image_format(
                     name, self._load_image(name), max_width, self.devicePixelRatioF()
                 )
@@ -300,6 +308,63 @@ class NoteEditor(QTextEdit):
             block = block.next()
         self.setExtraSelections(selections)
 
+    def paintEvent(self, event) -> None:  # noqa: N802
+        super().paintEvent(event)
+        self._paint_dividers()
+
+    def _paint_dividers(self) -> None:
+        """구분선 블록의 가로선을 본문 폭에 맞춰 그린다."""
+        doc = self.document()
+        content_w = self.content_width()
+        left = float(doc.documentMargin())
+        right = left + content_w
+        viewport_h = self.viewport().height()
+
+        painter = QPainter(self.viewport())
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        block = doc.begin()
+        while block.isValid():
+            block_type, _ = fmt.read_block_type(block)
+            if block_type == fmt.DIVIDER and not block.text():
+                center_y = float(self.cursorRect(QTextCursor(block)).center().y())
+                if -20 <= center_y <= viewport_h + 20:
+                    style = fmt.read_divider_style(block)
+                    self._draw_divider_line(painter, left, right, center_y, style)
+            block = block.next()
+
+        painter.end()
+
+    def _draw_divider_line(
+        self, painter: QPainter, left: float, right: float, y: float, style: str
+    ) -> None:
+        if style == "solid":
+            pen = QPen(QColor(theme.PALETTE["border"]))
+            pen.setWidthF(1.2)
+            pen.setStyle(Qt.PenStyle.SolidLine)
+            painter.setPen(pen)
+            painter.drawLine(QPointF(left, y), QPointF(right, y))
+        elif style == "bold":
+            pen = QPen(QColor(theme.PALETTE["ink_soft"]))
+            pen.setWidthF(2.0)
+            pen.setStyle(Qt.PenStyle.SolidLine)
+            painter.setPen(pen)
+            painter.drawLine(QPointF(left, y), QPointF(right, y))
+        elif style == "double":
+            pen = QPen(QColor(theme.PALETTE["border"]))
+            pen.setWidthF(1.0)
+            pen.setStyle(Qt.PenStyle.SolidLine)
+            painter.setPen(pen)
+            painter.drawLine(QPointF(left, y - 1.5), QPointF(right, y - 1.5))
+            painter.drawLine(QPointF(left, y + 1.5), QPointF(right, y + 1.5))
+        else:  # "dashed"
+            pen = QPen(QColor(theme.PALETTE["ink_faint"]))
+            pen.setWidthF(1.2)
+            pen.setStyle(Qt.PenStyle.CustomDashLine)
+            pen.setDashPattern([4, 3])
+            painter.setPen(pen)
+            painter.drawLine(QPointF(left, y), QPointF(right, y))
+
     # --- 키 입력 -----------------------------------------------------
 
     def keyPressEvent(self, event) -> None:  # noqa: N802
@@ -316,6 +381,13 @@ class NoteEditor(QTextEdit):
         if ctrl and shift and event.key() == Qt.Key.Key_X:
             fmt.toggle_strike(self)
             return
+        if ctrl and shift and event.key() == Qt.Key.Key_D:
+            fmt.insert_divider(self)
+            return
+        alt = modifiers & Qt.KeyboardModifier.AltModifier
+        if (ctrl and alt and event.key() == Qt.Key.Key_S) or (ctrl and shift and event.key() == Qt.Key.Key_P):
+            fmt.insert_red_star(self)
+            return
         # Shift+Tab 은 보통 Key_Backtab 으로 오지만 플랫폼에 따라 Key_Tab+Shift 로도
         # 온다. 내어쓰기를 먼저 걸러야 들여쓰기로 잘못 잡히지 않는다.
         if not ctrl and (event.key() == Qt.Key.Key_Backtab
@@ -327,8 +399,26 @@ class NoteEditor(QTextEdit):
             return
         if event.key() == Qt.Key.Key_Space and not ctrl and fmt.try_autoformat(self):
             return
-        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and not shift and fmt.try_list_exit(self):
-            return
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and not shift:
+            if fmt.try_divider_autoformat_on_enter(self):
+                return
+            if fmt.try_list_exit(self):
+                return
+
+        # 구분선 블록에서 글자를 입력하면 일반 본문 문단으로 전환
+        cur = self.textCursor()
+        cur_block = cur.block()
+        if (
+            fmt.read_block_type(cur_block)[0] == fmt.DIVIDER
+            and not cur_block.text()
+            and not (ctrl or (modifiers & Qt.KeyboardModifier.AltModifier))
+            and event.text()
+            and event.text().isprintable()
+        ):
+            cur.setBlockFormat(fmt.block_format(fmt.TEXT))
+            cur.setCharFormat(fmt.char_format())
+            self.setTextCursor(cur)
+
         super().keyPressEvent(event)
 
     def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
@@ -348,5 +438,7 @@ class NoteEditor(QTextEdit):
             check.setPosition(max(0, probe))
             char_fmt = check.charFormat()
             if char_fmt.isImageFormat():
-                return char_fmt.toImageFormat().name() or None
+                name = char_fmt.toImageFormat().name()
+                if name and not name.startswith("builtin:"):
+                    return name
         return None

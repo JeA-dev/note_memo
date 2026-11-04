@@ -17,7 +17,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QMimeData, QPoint, Qt  # noqa: E402
 from PySide6.QtGui import QImage, QTextCursor  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
+QMessageBox.question = staticmethod(lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
 
 from notememo import config  # noqa: E402
 
@@ -415,6 +416,184 @@ def main() -> int:
           "새 형식 노트인데 본문 첫 줄을 제목으로 가져가 버림")
     check(first_runs and first_runs[0].get("sz") == 17,
           f"제목1이 글자 크기 17로 이어받지 못함: {first_runs}")
+
+    # --- 글자 크기 변경 후 목록 작성 시 불릿/글자 크기 일관성 ---------
+    list_date = today - _dt.timedelta(days=50)
+    window.go_to(list_date)
+    window.toolbar.apply_size(16)
+    fmt.toggle_bold(editor)
+    type_text(editor, "<파이썬>")
+    QTest.keyClick(editor, Qt.Key.Key_Return)
+    window.toolbar.apply_size(11)
+    fmt.toggle_bold(editor)
+    window._block(fmt.BULLET)
+    check(round(editor.textCursor().blockCharFormat().fontPointSize()) == 11,
+          f"글자 크기 축소 후 목록 전환 시 불릿 크기가 따라오지 않음: {editor.textCursor().blockCharFormat().fontPointSize()}")
+    check(fmt.current_size(editor) == 11,
+          f"글자 크기 축소 후 목록 전환 시 입력 크기가 바뀜: {fmt.current_size(editor)}")
+    type_text(editor, "맛보기")
+    QTest.keyClick(editor, Qt.Key.Key_Return)
+    check(round(editor.textCursor().blockCharFormat().fontPointSize()) == 11,
+          "목록 줄바꿈 후 불릿 크기가 달라짐")
+
+    # 자동 서식(- + Space) 시에도 변경한 글자 크기가 유지되어야 한다
+    QTest.keyClick(editor, Qt.Key.Key_Return)   # 목록 종료
+    window.toolbar.apply_size(18)
+    type_text(editor, "큰 제목")
+    QTest.keyClick(editor, Qt.Key.Key_Return)
+    window.toolbar.apply_size(12)
+    type_text(editor, "-")
+    QTest.keyClick(editor, Qt.Key.Key_Space)
+    check(round(editor.textCursor().blockCharFormat().fontPointSize()) == 12,
+          f"자동 서식(- ) 목록 전환 시 불릿 크기가 이전 줄 크기로 되돌아감: {editor.textCursor().blockCharFormat().fontPointSize()}")
+    check(fmt.current_size(editor) == 12,
+          f"자동 서식(- ) 목록 전환 시 글자 크기가 이전 줄 크기로 되돌아감: {fmt.current_size(editor)}")
+
+    # --- 구분선 서식 (툴바, 단축키, 마크다운 --- 자동변환, 저장/복원) ---
+    div_date = today - _dt.timedelta(days=70)
+    window.go_to(div_date)
+    type_text(editor, "구역 1")
+    # 툴바 버튼으로 구분선 삽입
+    window.toolbar.insert_divider("dashed")
+    type_text(editor, "구역 2")
+    blocks = editor.blocks()
+    types = [b.get("type") for b in blocks]
+    check(types == [fmt.TEXT, fmt.DIVIDER, fmt.TEXT], f"툴바 구분선 삽입 실패: {types}")
+
+    # 단축키 Ctrl+Shift+D 로 구분선 삽입
+    QTest.keyClick(
+        editor, Qt.Key.Key_D,
+        Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier,
+    )
+    type_text(editor, "구역 3")
+    types = [b.get("type") for b in editor.blocks()]
+    check(types == [fmt.TEXT, fmt.DIVIDER, fmt.TEXT, fmt.DIVIDER, fmt.TEXT],
+          f"단축키 구분선 삽입 실패: {types}")
+
+    # '---' 입력 후 Enter 로 구분선 자동 변환
+    QTest.keyClick(editor, Qt.Key.Key_Return)
+    type_text(editor, "---")
+    QTest.keyClick(editor, Qt.Key.Key_Return)
+    type_text(editor, "구역 4")
+    types = [b.get("type") for b in editor.blocks()]
+    check(types[-2] == fmt.DIVIDER, f"'---' Enter 자동 구분선 변환 실패: {types}")
+
+    # '---' 입력 후 Space 로 구분선 자동 변환
+    QTest.keyClick(editor, Qt.Key.Key_Return)
+    type_text(editor, "---")
+    QTest.keyClick(editor, Qt.Key.Key_Space)
+    type_text(editor, "구역 5")
+    types = [b.get("type") for b in editor.blocks()]
+    check(types[-2] == fmt.DIVIDER, f"'---' Space 자동 구분선 변환 실패: {types}")
+
+    # 저장 및 복원 검증
+    window.save()
+    window.step_day(-1)
+    window.go_to(div_date)
+    restored_types = [b.get("type") for b in editor.blocks()]
+    check(restored_types == types, f"구분선 저장 후 재방문 복원 실패: {restored_types} vs {types}")
+
+    # Backspace 로 구분선 삭제 검증
+    cur = editor.textCursor()
+    cur.movePosition(QTextCursor.MoveOperation.StartOfBlock)
+    editor.setTextCursor(cur)
+    before_count = len(editor.blocks())
+    QTest.keyClick(editor, Qt.Key.Key_Backspace)
+    after_count = len(editor.blocks())
+    check(after_count == before_count - 1, f"구분선 Backspace 삭제 실패: {before_count} -> {after_count}")
+
+    # --- 서식 지우기 버튼 삭제 및 빨간색 별표 서식 검증 ---
+    check(not hasattr(window.toolbar, "clear"), "서식 지우기 버튼이 툴바에 남아 있음")
+    check(hasattr(window.toolbar, "star"), "빨간 별표 버튼이 툴바에 없음")
+
+    star_date = today - _dt.timedelta(days=80)
+    window.go_to(star_date)
+    # 툴바 버튼으로 빨간 별표(스케치 스타일) 삽입
+    window.toolbar.insert_star("sketch", filled=False)
+    type_text(editor, "중요 개념 1")
+    QTest.keyClick(editor, Qt.Key.Key_Return)
+    # 단축키 Ctrl+Alt+S 로 빨간 별표 삽입
+    QTest.keyClick(
+        editor, Qt.Key.Key_S,
+        Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.AltModifier,
+    )
+    type_text(editor, "중요 개념 2")
+
+    star_blocks = editor.blocks()
+    check(len(star_blocks) == 2, f"별표 삽입 블록 수 이상: {len(star_blocks)}")
+    first_runs = star_blocks[0].get("runs", [])
+    check(len(first_runs) == 2, f"별표 + 본문 런 분리 실패: {first_runs}")
+    check(first_runs[0].get("star") == "sketch",
+          f"첫 번째 별표 서식 이상: {first_runs[0]}")
+    check(first_runs[1].get("text") == " 중요 개념 1" and "c" not in first_runs[1],
+          f"별표 뒤 본문 텍스트 서식 오염: {first_runs[1]}")
+
+    second_runs = star_blocks[1].get("runs", [])
+    check(len(second_runs) == 2, f"두 번째 별표 + 본문 런 분리 실패: {second_runs}")
+    check(second_runs[0].get("star") == "sketch",
+          f"두 번째 별표 서식 이상: {second_runs[0]}")
+    check(second_runs[1].get("text") == " 중요 개념 2",
+          f"두 번째 별표 뒤 본문 텍스트 이상: {second_runs[1]}")
+
+    # 저장 및 복원
+    window.save()
+    window.step_day(-1)
+    window.go_to(star_date)
+    restored_star_blocks = editor.blocks()
+    check(restored_star_blocks == star_blocks,
+          f"빨간 별표 저장/복원 실패: {restored_star_blocks} vs {star_blocks}")
+
+    # --- 노트 삭제 기능 검증 ----------------------------------------
+    # 1. 새 빈 날짜에서는 삭제 버튼이 비활성화되어 있어야 한다.
+    empty_date = today - _dt.timedelta(days=99)
+    window.go_to(empty_date)
+    check(not window.header.delete_button.isEnabled(), "빈 날짜에서 노트 삭제 버튼이 활성화되어 있음")
+
+    # 글자를 입력하면 삭제 버튼이 즉시 활성화된다.
+    type_text(editor, "실수로 작성한 내용")
+    check(window.header.delete_button.isEnabled(), "내용 입력 후 삭제 버튼이 활성화되지 않음")
+    window.save()
+    check(config.note_path(empty_date).is_file(), "실수 노트가 저장되지 않음")
+    check(empty_date in storage.list_note_dates(), "실수 노트가 목록에 나타나지 않음")
+
+    # 2. 실수로 생성된 노트 삭제 (현재 열린 노트 삭제)
+    # 삭제 시 파일이 지워지고, 오늘 날짜로 이동해야 한다.
+    window.delete_note(empty_date)
+    check(not config.note_path(empty_date).is_file(), "노트 삭제 후 파일이 디스크에 남아 있음")
+    check(empty_date not in storage.list_note_dates(), "노트 삭제 후 목록에 날짜가 남아 있음")
+    check(editor.date == today, "과거 실수 노트 삭제 후 오늘로 돌아오지 않음")
+
+    # 3. 사이드바를 통한 다른 노트 삭제 검증
+    other_date = today - _dt.timedelta(days=98)
+    storage.save_note(other_date, storage.Note("사이드바 삭제 테스트", [{"type": "text", "runs": [{"text": "내용"}]}], []))
+    window.sidebar.refresh(today)
+    check(other_date in storage.list_note_dates(), "테스트 노트 생성 실패")
+
+    window.delete_note(other_date)
+    check(not config.note_path(other_date).is_file(), "사이드바 노트 삭제 실패")
+    check(other_date not in storage.list_note_dates(), "사이드바 삭제 후 목록 갱신 실패")
+    check(editor.date == today, "사이드바의 다른 노트 삭제 시 현재 에디터 날짜가 변경됨")
+
+    # 4. 이미지/첨부파일이 포함된 노트 삭제 시 폴더 정리 검증
+    media_date = today - _dt.timedelta(days=97)
+    window.go_to(media_date)
+    window.editor.insert_image(screenshot(200, 200))
+    window.save()
+    check(config.image_dir(media_date).is_dir(), "이미지 폴더 생성 실패")
+    window.delete_note(media_date)
+    check(not config.image_dir(media_date).is_dir(), "노트 삭제 후 이미지 폴더가 삭제되지 않음")
+    check(not config.note_path(media_date).is_file(), "미디어 노트 삭제 후 파일이 남아 있음")
+
+    # 5. _NoteListWidget Delete 키 시그널 검증
+    received_delete = []
+    window.sidebar.deleteRequested.connect(received_delete.append)
+    sample_date = today - _dt.timedelta(days=96)
+    storage.save_note(sample_date, storage.Note("키보드 삭제 테스트", [{"type": "text", "runs": [{"text": "내용"}]}], []))
+    window.sidebar.refresh(today)
+    window.sidebar._select_in_list(sample_date)
+    QTest.keyClick(window.sidebar.note_list, Qt.Key.Key_Delete)
+    check(sample_date in received_delete, "NoteList에서 Delete 키 입력 시 deleteRequested 시그널이 발생하지 않음")
+    storage.delete_note(sample_date)
 
     if failures:
         print("FAIL")

@@ -152,6 +152,28 @@ QLineEdit#TitleInput {{
     selection-color: {p['ink']};
 }}
 QLineEdit#TitleInput[empty="true"] {{ color: {p['ink_faint']}; }}
+QToolButton#DeleteNoteButton {{
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: {p['ink_soft']};
+    padding: 4px 8px;
+    font-size: 12px;
+}}
+QToolButton#DeleteNoteButton:hover {{
+    background: #FEE2E2;
+    border: 1px solid #FECACA;
+    color: #DC2626;
+}}
+QToolButton#DeleteNoteButton:pressed {{
+    background: #FCA5A5;
+    color: #B91C1C;
+}}
+QToolButton#DeleteNoteButton:disabled {{
+    color: {p['ink_faint']};
+    background: transparent;
+    border: 1px solid transparent;
+}}
 QWidget#Toolbar {{
     background: transparent;
     border-bottom: 1px solid {p['border']};
@@ -173,6 +195,18 @@ QToolButton#FmtButton:pressed {{ background: {p['accent_soft']}; }}
 QToolButton#FmtButton::menu-indicator {{ image: none; }}
 QFrame#Sep {{ background: {p['border']}; max-width: 1px; }}
 
+/* 첨부 버튼 */
+QToolButton#AttachButton {{
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    color: {p['ink_soft']};
+    padding: 4px 8px;
+    font-size: 12px;
+}}
+QToolButton#AttachButton:hover {{ background: {p['hover']}; color: {p['ink']}; }}
+QToolButton#AttachButton:pressed {{ background: {p['accent_soft']}; }}
+
 /* 저장 버튼. 저장할 게 있으면 진해져서 버튼만 봐도 미저장 상태를 알 수 있다. */
 QToolButton#SaveButton {{
     background: transparent;
@@ -190,6 +224,107 @@ QToolButton#SaveButton[dirty="true"] {{
     font-weight: 600;
 }}
 QToolButton#SaveButton[dirty="true"]:hover {{ background: {p['hover']}; }}
+
+/* ── 첨부파일 바 ────────────────────────────── */
+QWidget#AttachmentBar {{
+    background: transparent;
+    border-bottom: 1px solid {p['border']};
+}}
+QFrame#AttachmentChip {{
+    background: {p['sidebar']};
+    border: 1px solid {p['border']};
+    border-radius: 6px;
+}}
+QFrame#AttachmentChip:hover {{
+    background: {p['hover']};
+    border-color: {p['ink_soft']};
+}}
+QLabel#AttachmentName {{
+    color: {p['ink']};
+    font-size: 11px;
+    font-weight: 500;
+}}
+QLabel#AttachmentSize {{
+    color: {p['ink_soft']};
+    font-size: 10px;
+}}
+QToolButton#AttachmentDelete {{
+    background: transparent;
+    border: none;
+    border-radius: 3px;
+    color: {p['ink_faint']};
+    font-size: 11px;
+    font-weight: bold;
+    padding: 0 2px;
+    min-width: 14px;
+    min-height: 14px;
+}}
+QToolButton#AttachmentDelete:hover {{
+    background: {p['hover']};
+    color: #C0392B;
+}}
+QToolButton#AttachmentInsert {{
+    background: transparent;
+    border: 1px solid {p['border']};
+    border-radius: 3px;
+    color: {p['ink_soft']};
+    font-size: 9px;
+    font-weight: 600;
+    padding: 0 3px;
+    min-height: 14px;
+}}
+QToolButton#AttachmentInsert:hover {{
+    background: {p['accent_soft']};
+    color: {p['accent']};
+    border-color: {p['accent']};
+}}
+QToolButton#AttachmentSummaryTab {{
+    background: {p['accent_soft']};
+    border: 1px solid {p['border']};
+    border-radius: 6px;
+    color: {p['accent']};
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+}}
+QToolButton#AttachmentSummaryTab:hover {{
+    background: {p['hover']};
+    border-color: {p['accent']};
+    color: {p['ink']};
+}}
+QFrame#AttachmentPopup {{
+    background: {p['paper']};
+    border: 1px solid {p['border']};
+    border-radius: 8px;
+}}
+QLabel#AttachmentPopupHeader {{
+    color: {p['ink_soft']};
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 4px;
+}}
+QFrame#AttachmentPopupRow {{
+    background: {p['sidebar']};
+    border: 1px solid {p['border']};
+    border-radius: 6px;
+}}
+QFrame#AttachmentPopupRow:hover {{
+    background: {p['hover']};
+    border-color: {p['ink_soft']};
+}}
+QToolButton#AttachmentPopupAction {{
+    background: transparent;
+    border: 1px solid {p['border']};
+    border-radius: 4px;
+    color: {p['ink_soft']};
+    font-size: 10px;
+    padding: 1px 6px;
+}}
+QToolButton#AttachmentPopupAction:hover {{
+    background: {p['accent_soft']};
+    color: {p['accent']};
+    border-color: {p['accent']};
+}}
 
 /* ── 에디터 ─────────────────────────────────── */
 QTextEdit#Editor {{

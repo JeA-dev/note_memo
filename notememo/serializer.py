@@ -14,6 +14,7 @@ from PySide6.QtCore import QUrl
 from PySide6.QtGui import QImage, QTextCursor, QTextDocument, QTextImageFormat
 
 from . import formatting as fmt
+from . import theme
 from .formatting import IMAGE, TEXT, TODO
 
 ImageLoader = Callable[[str], "QImage | None"]
@@ -94,10 +95,19 @@ def document_to_blocks(doc: QTextDocument) -> list[dict[str, Any]]:
             if char_fmt.isImageFormat():
                 name = char_fmt.toImageFormat().name()
                 if name:
-                    # 같은 이미지가 연달아 있으면 Qt 가 한 프래그먼트로 묶는다.
-                    # 프래그먼트의 글자 수(각 U+FFFC)가 곧 이미지 개수다.
-                    for _ in range(max(1, len(fragment.text()))):
-                        runs.append({"image": name})
+                    if name.startswith("builtin:star_"):
+                        star_type = name.split("builtin:star_")[1]
+                        star_run: dict[str, Any] = {"star": star_type}
+                        point = round(char_fmt.fontPointSize())
+                        if point > 0 and point != theme.BODY_PT:
+                            star_run["sz"] = theme.clamp_size(point)
+                        for _ in range(max(1, len(fragment.text()))):
+                            runs.append(dict(star_run))
+                    else:
+                        # 같은 이미지가 연달아 있으면 Qt 가 한 프래그먼트로 묶는다.
+                        # 프래그먼트의 글자 수(각 U+FFFC)가 곧 이미지 개수다.
+                        for _ in range(max(1, len(fragment.text()))):
+                            runs.append({"image": name})
                 continue
 
             # U+2028(소프트 줄바꿈)은 그대로 둬야 왕복 시 문단이 쪼개지지 않는다.
@@ -111,7 +121,12 @@ def document_to_blocks(doc: QTextDocument) -> list[dict[str, Any]]:
                 runs.append({"text": text, **flags})
 
         out.append(_make_block(
-            block_type, checked, fmt.read_align(block), fmt.read_indent(block), runs
+            block_type,
+            checked,
+            fmt.read_align(block),
+            fmt.read_indent(block),
+            runs,
+            style=fmt.read_divider_style(block) if block_type == fmt.DIVIDER else fmt.DEFAULT_DIVIDER_STYLE,
         ))
         block = block.next()
 
@@ -119,9 +134,19 @@ def document_to_blocks(doc: QTextDocument) -> list[dict[str, Any]]:
 
 
 def _make_block(
-    block_type: str, checked: bool, align: str, indent: int, runs: list[dict]
+    block_type: str,
+    checked: bool,
+    align: str,
+    indent: int,
+    runs: list[dict],
+    style: str = fmt.DEFAULT_DIVIDER_STYLE,
 ) -> dict[str, Any]:
     block: dict[str, Any] = {"type": block_type}
+    if block_type == fmt.DIVIDER:
+        if style != fmt.DEFAULT_DIVIDER_STYLE:
+            block["style"] = style
+        block["runs"] = []
+        return block
     if block_type == TODO:
         block["checked"] = checked
     if align != fmt.LEFT:       # 기본값은 키를 빼서 파일을 깔끔하게 유지한다
@@ -141,8 +166,8 @@ def has_image(block: dict[str, Any]) -> bool:
 
 
 def _is_empty(block: dict[str, Any]) -> bool:
-    """글자도 이미지도 없는 문단."""
-    return not any(run.get("text") or run.get("image") for run in block.get("runs", []))
+    """글자도 이미지도 별표도 없는 문단."""
+    return not any(run.get("text") or run.get("image") or run.get("star") for run in block.get("runs", []))
 
 
 def _trim_trailing_empty(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -176,6 +201,7 @@ def blocks_to_document(
 ) -> None:
     """문서를 blocks 내용으로 교체한다. 되돌리기 스택과 수정 플래그도 초기화한다."""
     doc.clear()
+    fmt.register_star_resources(doc)
     cursor = QTextCursor(doc)
     cursor.beginEditBlock()
 
@@ -194,11 +220,26 @@ def blocks_to_document(
             image=has_image(block),
             align=block.get("align", fmt.LEFT),
             indent=fmt.clamp_indent(block.get("indent")),
+            divider_style=block.get("style", fmt.DEFAULT_DIVIDER_STYLE),
         ))
         if block_type in fmt.LIST_TYPES:
             cursor.createList(fmt.list_format())
 
-        for run in block.get("runs", []):
+        runs = block.get("runs", [])
+        first_text = next((r for r in runs if "text" in r), None)
+        base_char_fmt = fmt.char_format(size=first_text.get("sz") if first_text else None)
+        cursor.setBlockCharFormat(base_char_fmt)
+        cursor.setCharFormat(base_char_fmt)
+
+        for run in runs:
+            star_type = run.get("star")
+            if star_type:
+                fmt.insert_star_run(
+                    cursor,
+                    star_type=star_type,
+                    size=run.get("sz") or (first_text.get("sz") if first_text else None),
+                )
+                continue
             name = run.get("image")
             if name:
                 insert_image_run(cursor, name, image_loader(name), max_width, dpr)

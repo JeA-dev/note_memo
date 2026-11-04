@@ -61,6 +61,17 @@ SAMPLE = [
         {"image": "img_20260828-143022-a1b2.png"},
         {"text": " 뒷글", "b": True},
     ]},
+    {"type": "divider", "runs": []},
+    {"type": "divider", "style": "solid", "runs": []},
+    # 빨간색 별표 런 검증 (스케치 스타일 및 채움 스타일)
+    {"type": "text", "runs": [
+        {"star": "sketch"},
+        {"text": " 중요한 시험 출제 항목"},
+    ]},
+    {"type": "text", "runs": [
+        {"star": "filled", "sz": 18},
+        {"text": " 큰 별표 강조 항목", "sz": 18},
+    ]},
 ]
 
 

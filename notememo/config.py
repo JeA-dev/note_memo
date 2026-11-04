@@ -43,11 +43,20 @@ def _documents_dir() -> Path:
 DATA_DIR = _documents_dir() / APP_NAME
 NOTES_DIR = DATA_DIR / "notes"
 IMAGES_DIR = DATA_DIR / "images"
+ATTACHMENTS_DIR = DATA_DIR / "attachments"
+
+
+def attachment_base_dir() -> Path:
+    # 테스트 등에서 DATA_DIR 이 동적으로 변경된 경우 반영
+    if ATTACHMENTS_DIR.parent != DATA_DIR:
+        return DATA_DIR / "attachments"
+    return ATTACHMENTS_DIR
 
 
 def ensure_dirs() -> None:
     NOTES_DIR.mkdir(parents=True, exist_ok=True)
     IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    attachment_base_dir().mkdir(parents=True, exist_ok=True)
 
 
 def note_path(date: _dt.date) -> Path:
@@ -56,6 +65,10 @@ def note_path(date: _dt.date) -> Path:
 
 def image_dir(date: _dt.date) -> Path:
     return IMAGES_DIR / date.strftime(DATE_FMT)
+
+
+def attachment_dir(date: _dt.date) -> Path:
+    return attachment_base_dir() / date.strftime(DATE_FMT)
 
 
 def parse_date(text: str) -> _dt.date | None:

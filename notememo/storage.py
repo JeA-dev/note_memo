@@ -22,12 +22,13 @@ class Note(NamedTuple):
 
     title: str
     blocks: list[dict[str, Any]]
+    attachments: list[dict[str, Any]] = []
 
     def is_empty(self) -> bool:
-        return not self.title.strip() and not self.blocks
+        return not self.title.strip() and not self.blocks and not self.attachments
 
 
-EMPTY = Note("", [])
+EMPTY = Note("", [], [])
 
 
 # ── 노트 ────────────────────────────────────────────────────────────
@@ -100,7 +101,9 @@ def load_note(date: _dt.date) -> Note:
     from . import serializer     # 순환 임포트를 피하려고 여기서 가져온다
 
     blocks = [serializer.normalize_block(b) for b in _convert_headings(blocks)]
-    note = Note(title, blocks)
+    raw_att = data.get("attachments")
+    attachments = [dict(a) for a in raw_att] if isinstance(raw_att, list) else []
+    note = Note(title, blocks, attachments)
     _cache[key] = (mtime, note)
     return note
 
@@ -121,11 +124,28 @@ def save_note(date: _dt.date, note: Note) -> None:
         "updated_at": _dt.datetime.now().isoformat(timespec="seconds"),
         "blocks": note.blocks,
     }
+    if note.attachments:
+        payload["attachments"] = note.attachments
     # 저장 도중 죽어도 기존 파일이 남도록 임시 파일에 쓴 뒤 교체한다.
     tmp = path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(path)
     _cache[str(path)] = (path.stat().st_mtime, note)
+
+
+def delete_note(date: _dt.date) -> None:
+    """해당 날짜의 노트 파일, 이미지 폴더, 첨부파일 폴더를 모두 삭제하고 캐시를 비운다."""
+    path = config.note_path(date)
+    path.unlink(missing_ok=True)
+    _cache.pop(str(path), None)
+
+    img_dir = config.image_dir(date)
+    if img_dir.is_dir():
+        shutil.rmtree(img_dir, ignore_errors=True)
+
+    att_dir = config.attachment_dir(date)
+    if att_dir.is_dir():
+        shutil.rmtree(att_dir, ignore_errors=True)
 
 
 def list_note_dates() -> list[_dt.date]:
@@ -170,7 +190,8 @@ def search(query: str) -> list[_dt.date]:
     matches = []
     for date in list_note_dates():
         note = load_note(date)
-        haystack = f"{note.title}\n{blocks_to_text(note.blocks)}".casefold()
+        att_text = " ".join(att.get("original_name", "") for att in note.attachments)
+        haystack = f"{note.title}\n{blocks_to_text(note.blocks)}\n{att_text}".casefold()
         if needle in haystack:
             matches.append(date)
     return matches
@@ -210,3 +231,66 @@ def adopt_image(target_date: _dt.date, name: str) -> str:
             shutil.copy2(source, target)
             return name
     return name
+
+
+# ── 파일 첨부 ───────────────────────────────────────────────────────
+
+def format_size(size: int) -> str:
+    """바이트 크기를 읽기 쉬운 문자열로 변환 (예: 1.2 MB)."""
+    if size < 1024:
+        return f"{size} B"
+    elif size < 1024 * 1024:
+        return f"{size / 1024:.1f} KB"
+    elif size < 1024 * 1024 * 1024:
+        return f"{size / (1024 * 1024):.1f} MB"
+    else:
+        return f"{size / (1024 * 1024 * 1024):.1f} GB"
+
+
+def get_file_type(filename_or_path: str | Path) -> str:
+    ext = Path(filename_or_path).suffix.lower()
+    if ext == ".pdf":
+        return "pdf"
+    elif ext in {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico", ".tiff"}:
+        return "image"
+    elif ext in {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".webm", ".flv", ".m4v", ".3gp"}:
+        return "video"
+    return "file"
+
+
+def attachment_path(date: _dt.date, name: str) -> Path:
+    return config.attachment_dir(date) / Path(name).name
+
+
+def save_attachment(date: _dt.date, source_path: str | Path) -> dict[str, Any] | None:
+    """파일을 해당 날짜의 attachments 폴더로 복사하고 메타데이터 dict를 반환한다."""
+    source = Path(source_path)
+    if not source.is_file():
+        return None
+
+    target_dir = config.attachment_dir(date)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    stamp = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    clean_name = source.name.replace(" ", "_")
+    stored_name = f"att_{stamp}-{secrets.token_hex(2)}_{clean_name}"
+    target_path = target_dir / stored_name
+
+    try:
+        shutil.copy2(source, target_path)
+        size = target_path.stat().st_size
+    except OSError:
+        return None
+
+    return {
+        "name": stored_name,
+        "original_name": source.name,
+        "size": size,
+        "type": get_file_type(source.name),
+    }
+
+
+def delete_attachment_file(date: _dt.date, name: str) -> None:
+    """디스크에서 첨부파일을 삭제한다."""
+    path = attachment_path(date, name)
+    path.unlink(missing_ok=True)

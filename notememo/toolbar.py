@@ -2,8 +2,19 @@
 
 from __future__ import annotations
 
+import math
+
 from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QAction, QColor, QFont, QPainter, QPen, QPixmap
+from PySide6.QtGui import (
+    QAction,
+    QColor,
+    QFont,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPixmap,
+    QPolygonF,
+)
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QMenu, QToolButton, QWidget
 
 from . import formatting as fmt
@@ -90,6 +101,75 @@ def _list_icon(color: str) -> QPixmap:
     return pixmap
 
 
+def _divider_icon(style: str, color: str) -> QPixmap:
+    """구분선 모양 아이콘 (점선, 실선, 굵은선, 이중선)."""
+    pixmap, painter = _canvas()
+    _stroke(painter, color, 1.4)
+    pen = painter.pen()
+    if style == "solid":
+        pen.setWidthF(1.4)
+        pen.setStyle(Qt.PenStyle.SolidLine)
+        painter.setPen(pen)
+        painter.drawLine(QPointF(1.5, 8.0), QPointF(14.5, 8.0))
+    elif style == "bold":
+        pen.setWidthF(2.6)
+        pen.setStyle(Qt.PenStyle.SolidLine)
+        painter.setPen(pen)
+        painter.drawLine(QPointF(1.5, 8.0), QPointF(14.5, 8.0))
+    elif style == "double":
+        pen.setWidthF(1.0)
+        pen.setStyle(Qt.PenStyle.SolidLine)
+        painter.setPen(pen)
+        painter.drawLine(QPointF(1.5, 6.2), QPointF(14.5, 6.2))
+        painter.drawLine(QPointF(1.5, 9.8), QPointF(14.5, 9.8))
+    else:  # "dashed"
+        pen.setWidthF(1.4)
+        pen.setStyle(Qt.PenStyle.DashLine)
+        painter.setPen(pen)
+        painter.drawLine(QPointF(1.5, 8.0), QPointF(14.5, 8.0))
+    painter.end()
+    return pixmap
+
+
+def _star_icon(color: str = "#E61B1B", filled: bool = False) -> QPixmap:
+    """손글씨 느낌의 빨간 별표 아이콘 (빈 별 / 찬 별)."""
+    pixmap = QPixmap(_ICON, _ICON)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    cx, cy = 8.0, 8.0
+    r_out = 6.8
+    if filled:
+        r_in = 2.9
+        points = [
+            QPointF(
+                cx + (r_out if i % 2 == 0 else r_in) * math.cos(-math.pi / 2 + i * math.pi / 5),
+                cy + (r_out if i % 2 == 0 else r_in) * math.sin(-math.pi / 2 + i * math.pi / 5),
+            )
+            for i in range(10)
+        ]
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(color))
+        painter.drawPolygon(QPolygonF(points))
+    else:
+        # 손글씨로 쓱쓱 그은 5점 별 (스케치 스타일)
+        points = [
+            QPointF(
+                cx + r_out * math.cos(-math.pi / 2 + i * 4 * math.pi / 5),
+                cy + r_out * math.sin(-math.pi / 2 + i * 4 * math.pi / 5),
+            )
+            for i in range(6)
+        ]
+        pen = QPen(QColor(color))
+        pen.setWidthF(1.3)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        painter.drawPolyline(points)
+    painter.end()
+    return pixmap
+
+
 def _indent_icon(color: str, outward: bool = False) -> QPixmap:
     """위아래는 전체 폭, 가운데 두 줄은 안으로 들어간 문단 + 방향 화살표."""
     pixmap, painter = _canvas()
@@ -137,6 +217,24 @@ def _save_icon(color: str) -> QPixmap:
     return pixmap
 
 
+def _attach_icon(color: str) -> QPixmap:
+    """클립 모양 아이콘. 첨부 버튼용."""
+    pixmap, painter = _canvas()
+    _stroke(painter, color, 1.3)
+    path = QPainterPath()
+    path.moveTo(6.2, 9.0)
+    path.lineTo(6.2, 5.8)
+    path.arcTo(QRectF(6.2, 3.2, 3.8, 4.4), 180, -180)
+    path.lineTo(10.0, 11.2)
+    path.arcTo(QRectF(4.0, 9.0, 6.0, 4.6), 0, -180)
+    path.lineTo(4.0, 4.2)
+    path.arcTo(QRectF(4.0, 1.4, 7.8, 5.0), 180, -180)
+    path.lineTo(11.8, 9.0)
+    painter.drawPath(path)
+    painter.end()
+    return pixmap
+
+
 class _StrikeButton(QToolButton):
     """가운데 줄이 그어진 S.
 
@@ -168,6 +266,7 @@ class FormatToolbar(ColumnRow):
     """에디터에 붙어 동작하는 얇은 서식 바."""
 
     saveRequested = Signal()
+    attachRequested = Signal()
 
     def __init__(self, editor, parent=None):
         # 버튼 안쪽 여백(8px)만큼 당겨야 글자가 본문 왼쪽 선에 온다.
@@ -175,6 +274,9 @@ class FormatToolbar(ColumnRow):
         self.setObjectName("Toolbar")
         self._editor = editor
         self._last_highlight = theme.HIGHLIGHT_COLORS[0]
+        self._last_divider_style = fmt.DEFAULT_DIVIDER_STYLE
+        self._last_star_type = "sketch"
+        self._last_star_filled = False
 
         layout = self.row
         layout.setSpacing(3)
@@ -194,7 +296,9 @@ class FormatToolbar(ColumnRow):
         layout.addWidget(self._separator())
 
         self.highlight = self._build_highlight_button()
+        self.star = self._build_star_button()
         layout.addWidget(self.highlight)
+        layout.addWidget(self.star)
         layout.addWidget(self._separator())
 
         self.todo = self._icon_button(
@@ -203,8 +307,10 @@ class FormatToolbar(ColumnRow):
         self.bullet = self._icon_button(
             _list_icon, "목록  (Ctrl+Shift+8)", lambda: self._block(fmt.BULLET)
         )
+        self.divider = self._build_divider_button()
         layout.addWidget(self.todo)
         layout.addWidget(self.bullet)
+        layout.addWidget(self.divider)
         layout.addWidget(self._separator())
 
         self.align = self._build_align_button()
@@ -219,14 +325,10 @@ class FormatToolbar(ColumnRow):
         )
         layout.addWidget(self.outdent)
         layout.addWidget(self.indent)
-        layout.addWidget(self._separator())
-
-        self.clear = self._button(
-            "서식 지우기", "서식 지우기", lambda: fmt.clear_formatting(editor)
-        )
-        self.clear.setCheckable(False)
-        layout.addWidget(self.clear)
         layout.addStretch(1)
+
+        self.attach = self._build_attach_button()
+        layout.addWidget(self.attach)
 
         self.save = self._build_save_button()
         layout.addWidget(self.save)
@@ -305,6 +407,31 @@ class FormatToolbar(ColumnRow):
         button.setMenu(menu)
         return button
 
+    def _build_star_button(self) -> QToolButton:
+        """손글씨 느낌의 빨간 별표 삽입 드롭다운 버튼."""
+        button = QToolButton(self)
+        button.setObjectName("FmtButton")
+        button.setText(CARET)
+        button.setCheckable(False)
+        button.setToolTip("빨간 별표 삽입  (Ctrl+Alt+S)")
+        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        button.setIconSize(QSize(_ICON, _ICON))
+        button.setIcon(_star_icon("#E61B1B", filled=self._last_star_filled))
+
+        menu = QMenu(button)
+        for star_type, char, label, filled in [
+            ("sketch", "☆", "빨간 빈 별표  (스케치 스타일)", False),
+            ("filled", "★", "빨간 찬 별표  (채움 스타일)", True),
+        ]:
+            action = QAction(_star_icon("#E61B1B", filled=filled), f"{char}  {label}", menu)
+            action.triggered.connect(lambda _=False, t=star_type, f=filled: self.insert_star(t, f))
+            menu.addAction(action)
+        button.setMenu(menu)
+        return button
+
     def _build_size_button(self) -> QToolButton:
         """현재 글자 크기를 숫자로 보여주는 드롭다운."""
         button = QToolButton(self)
@@ -345,6 +472,41 @@ class FormatToolbar(ColumnRow):
             action.triggered.connect(lambda _=False, a=name: self.apply_align(a))
             menu.addAction(action)
         button.setMenu(menu)
+        return button
+
+    def _build_divider_button(self) -> QToolButton:
+        """구분선 삽입 드롭다운 버튼."""
+        button = QToolButton(self)
+        button.setObjectName("FmtButton")
+        button.setText(CARET)
+        button.setCheckable(False)
+        button.setToolTip("구분선  (Ctrl+Shift+D 또는 --- 입력 후 Enter)")
+        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        button.setIconSize(QSize(_ICON, _ICON))
+        button.setIcon(_divider_icon(self._last_divider_style, theme.PALETTE["ink_soft"]))
+
+        menu = QMenu(button)
+        for style_key, label in fmt.DIVIDER_STYLES:
+            action = QAction(_divider_icon(style_key, theme.PALETTE["ink"]), label, menu)
+            action.triggered.connect(lambda _=False, s=style_key: self.insert_divider(s))
+            menu.addAction(action)
+        button.setMenu(menu)
+        return button
+
+    def _build_attach_button(self) -> QToolButton:
+        button = QToolButton(self)
+        button.setObjectName("AttachButton")
+        button.setText("첨부")
+        button.setToolTip("파일 첨부  (PDF, 이미지, 동영상 등)")
+        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        button.setIconSize(QSize(_ICON, _ICON))
+        button.setIcon(_attach_icon(theme.PALETTE["ink_soft"]))
+        button.clicked.connect(self.attachRequested)
         return button
 
     def _build_save_button(self) -> QToolButton:
@@ -415,6 +577,22 @@ class FormatToolbar(ColumnRow):
         self._last_highlight = color
         self.highlight.setIcon(_highlight_icon(color))
         fmt.toggle_highlight(self._editor, color)
+        self.sync()
+        self._editor.setFocus()
+
+    def insert_divider(self, style: str | None = None) -> None:
+        style = style or self._last_divider_style
+        self._last_divider_style = style
+        self.divider.setIcon(_divider_icon(style, theme.PALETTE["ink_soft"]))
+        fmt.insert_divider(self._editor, style)
+        self.sync()
+        self._editor.setFocus()
+
+    def insert_star(self, star_type: str = "sketch", filled: bool = False) -> None:
+        self._last_star_type = star_type
+        self._last_star_filled = filled
+        self.star.setIcon(_star_icon("#E61B1B", filled=filled))
+        fmt.insert_red_star(self._editor, star_type=star_type)
         self.sync()
         self._editor.setFocus()
 
