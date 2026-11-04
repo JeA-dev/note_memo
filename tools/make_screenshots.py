@@ -44,6 +44,32 @@ def framed(image: QImage, radius: int = 10) -> QImage:
     return rounded
 
 
+def seed_attachments() -> None:
+    """첨부파일 칩이 화면에 보이도록 더미 파일 몇 개를 붙인다."""
+    import tempfile
+
+    from notememo import storage
+
+    scratch = Path(tempfile.mkdtemp(prefix="notememo-shot-att-"))
+    dummies = [
+        ("배포 장애 타임라인.pdf", b"%PDF-1.4\n" + b"0" * 40000),
+        ("서버로그_1104.txt", "504 Gateway Timeout x 41\n".encode() * 300),
+        ("캐시 설정.yaml", b"cache:\n  invalidate: false\n" * 40),
+    ]
+    attachments = []
+    for name, blob in dummies:
+        path = scratch / name
+        path.write_bytes(blob)
+        meta = storage.save_attachment(sample.TODAY, path)
+        if meta:
+            attachments.append(meta)
+
+    note = storage.load_note(sample.TODAY)
+    storage.save_note(
+        sample.TODAY, storage.Note(note.title, note.blocks, attachments)
+    )
+
+
 def main() -> int:
     app = QApplication(sys.argv)
     font = QFont()
@@ -53,6 +79,7 @@ def main() -> int:
     app.setStyleSheet(theme.stylesheet())
 
     sample.seed()
+    seed_attachments()
     window = MainWindow()
     window.resize(1180, 900)
     window.show()

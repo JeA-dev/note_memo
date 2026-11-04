@@ -55,14 +55,28 @@ powershell -ExecutionPolicy Bypass -File tools\create_shortcut.ps1
 **원본 해상도 PNG는 따로 보관**되므로 이미지를 더블클릭하면 기본 뷰어에서 원본 크기로 열립니다.
 이미지 파일을 복사하거나 창으로 끌어다 놓아도 똑같이 들어갑니다.
 
+## 파일 첨부
+
+스샷이 아닌 파일(PDF·동영상·문서 등)은 본문에 넣지 않고 노트에 **붙여** 둡니다.
+
+- 툴바의 **첨부** 버튼을 누르거나, 파일을 본문에 **끌어다 놓으면** 됩니다
+- 그날의 `attachments\` 폴더로 복사되므로 원본을 지워도 노트에 남습니다
+- 본문 위 칩 목록에서 **열기 · 폴더에서 보기 · 본문에 삽입 · 삭제** 를 할 수 있습니다
+- 칩이 한 줄을 넘치면 접히고, `첨부 N개` 에 마우스를 올리면 전체 목록이 펼쳐집니다
+- 검색은 첨부파일 **이름도 함께** 훑습니다
+
 ## 서식
 
 ![서식 툴바](docs/screenshot-toolbar.png)
 
-왼쪽부터 글자 크기 · 굵게 · 기울임 · 밑줄 · 취소선 · 형광펜(3색) · 체크박스 · 목록 ·
-정렬 · 내어쓰기 · 들여쓰기 · 서식 지우기, 오른쪽 끝이 저장 버튼입니다.
+왼쪽부터 글자 크기 · 굵게 · 기울임 · 밑줄 · 취소선 · 형광펜(3색) · **빨간 별표** ·
+체크박스 · 목록 · **구분선** · 정렬 · 내어쓰기 · 들여쓰기 · 첨부, 오른쪽 끝이 저장 버튼입니다.
 `▾` 가 붙은 것은 눌러서 고르는 드롭다운이고, 나머지는 켜고 끄는 토글입니다.
 버튼에 마우스를 올리면 이름과 단축키가 나옵니다.
+
+**빨간 별표**는 손글씨 느낌의 인라인 이미지라 글자 크기를 따라갑니다. 빈 별과 찬 별 두 가지입니다.
+**구분선**은 점선 · 실선 · 굵은선 · 이중선 네 가지이고, 줄 전체에 `---` `***` `___` 를 치고
+`Enter` 를 눌러도 만들어집니다.
 
 ## 단축키
 
@@ -83,6 +97,7 @@ powershell -ExecutionPolicy Bypass -File tools\create_shortcut.ps1
 | `Ctrl+T` | 오늘로 이동 |
 | `Ctrl+F` | 검색창으로 |
 | `Alt+←` `Alt+→` | 이전 / 다음 날짜 |
+| `Ctrl+Shift+Delete` | 지금 노트 삭제 (확인 후) |
 
 타이핑 중 자동 서식 — 줄 맨 앞에서 아래를 치고 스페이스:
 
@@ -90,6 +105,8 @@ powershell -ExecutionPolicy Bypass -File tools\create_shortcut.ps1
 |---|---|
 | `- ` | 목록 |
 | `[] ` | 체크박스 |
+
+줄 전체를 `---` `***` `___` 로 채우고 `Enter` 를 누르면 구분선이 됩니다.
 
 `Ctrl+Z` 한 번이면 되돌아갑니다. 체크박스는 마우스로 네모를 눌러 켜고 끕니다.
 
@@ -141,8 +158,9 @@ powershell -ExecutionPolicy Bypass -File tools\create_shortcut.ps1
 
 ```
 문서\NoteMemo\
-  notes\2026-08-28.json                       하루치 노트
+  notes\2026-08-28.json                            하루치 노트
   images\2026-08-28\img_20260828-143022-a1b2.png   그날 붙인 스샷 원본
+  attachments\2026-08-28\att_...-7b2c_타임라인.pdf  그날 첨부한 파일
 ```
 
 노트는 사람이 읽을 수 있는 JSON입니다. 문단이 블록, 같은 서식이 이어지는 구간이 run 입니다.
@@ -158,17 +176,29 @@ powershell -ExecutionPolicy Bypass -File tools\create_shortcut.ps1
         { "text": "캐시 무효화 누락", "b": true, "hl": "#FBEFA8" }
     ]},
     { "type": "todo", "checked": false, "runs": [{ "text": "롤백 스크립트 점검" }] },
+    { "type": "divider", "style": "dashed", "runs": [] },
     { "type": "text", "align": "center", "runs": [
         { "image": "img_20260828-143022-a1b2.png" },
         { "image": "img_20260828-143512-9f3c.png" }
     ]}
+  ],
+  "attachments": [
+    { "name": "att_20260828-143900-7b2c_타임라인.pdf",
+      "original_name": "타임라인.pdf", "size": 39104, "type": "pdf" }
   ]
 }
 ```
 
-블록 타입은 `text` `bullet` `todo`,
+블록 타입은 `text` `bullet` `todo` `divider`,
 run 플래그는 `b`(굵게) `i`(기울임) `u`(밑줄) `s`(취소선) `hl`(형광펜 색) `sz`(글자 크기) 입니다.
 블록에는 `align`(정렬)과 `indent`(들여쓰기 단계)가 붙고, 둘 다 기본값이 아닐 때만 저장됩니다.
+구분선 블록은 `style` 로 모양을 적습니다.
+
+**빨간 별표도 run 입니다** (`{"star": "sketch"}` 또는 `"filled"`). 이미지와 마찬가지로
+문단 안에 글자와 섞여 들어가고, `sz` 로 글자 크기를 따라갑니다.
+
+**첨부파일은 블록이 아니라 노트 단위 목록**(`attachments`)입니다. 본문 어디에도 끼어들지 않고
+노트 한 장에 딸린 파일이라서입니다. `name` 은 저장된 파일명, `original_name` 은 붙일 때의 원래 이름입니다.
 
 **이미지는 블록이 아니라 run 입니다** (`{"image": "파일명"}`). 한 문단에 스샷을 둘 나란히
 놓을 수 있어야 하기 때문입니다. 이미지를 독립 블록으로 두면 저장할 때마다 줄이 나뉩니다.
@@ -208,8 +238,13 @@ run 플래그는 `b`(굵게) `i`(기울임) `u`(밑줄) `s`(취소선) `hl`(형�
 .venv\Scripts\python.exe -m tests.test_app
 ```
 
+```bash
+.venv\Scripts\python.exe -m tests.test_attachment
+```
+
 `test_serializer` 는 블록 JSON ↔ 문서 왕복이 정확한지(데이터 유실이 없는지),
-`test_app` 은 창을 오프스크린으로 띄워 붙여넣기·서식·저장·복원 배선을 검증합니다.
+`test_app` 은 창을 오프스크린으로 띄워 붙여넣기·서식·저장·복원 배선을,
+`test_attachment` 는 첨부파일 복사·메타데이터·삭제를 검증합니다.
 둘 다 임시 폴더를 쓰므로 실제 노트를 건드리지 않습니다.
 
 디자인을 눈으로 확인하려면 (오프스크린에는 폰트가 없으므로 실제 플랫폼으로 실행):
@@ -252,6 +287,7 @@ QT_QPA_PLATFORM=windows .venv/Scripts/python.exe -m tests.preview_shot preview.p
 | `notememo/sidebar.py` | 검색·캘린더·노트 목록 |
 | `notememo/header.py` | 날짜 섹션 + 제목 섹션 |
 | `notememo/layout.py` | 본문 단 폭에 맞춰 끝나는 가로줄 (헤더·툴바·상태줄 공용) |
+| `notememo/attachment.py` | 첨부파일 칩 목록 — 자동 줄바꿈 FlowLayout, 전체 목록 팝업 |
 | `notememo/main_window.py` | 조립, 자동저장, 단축키 |
 | `tools/build_exe.py` | 배포용 단일 실행 파일 빌드 |
 | `tools/make_screenshots.py` | README 용 화면 이미지(`docs/`) 생성 |
