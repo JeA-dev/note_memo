@@ -390,6 +390,12 @@ class NoteEditor(QTextEdit):
         ctrl = modifiers & Qt.KeyboardModifier.ControlModifier
         shift = modifiers & Qt.KeyboardModifier.ShiftModifier
 
+        # Ctrl+V 를 길게 누르면 키 반복이 그대로 붙여넣기로 이어져, 같은 스샷이
+        # 여러 장 들어가고 디스크에도 PNG 가 그만큼 쌓인다. 큰 스샷을 저장하는
+        # 동안 화면이 잠깐 멈추면 그 사이 반복 입력이 쌓여 더 잘 터진다.
+        # 글자 반복은 그대로 두고 붙여넣기만 막는다.
+        if ctrl and event.key() == Qt.Key.Key_V and event.isAutoRepeat():
+            return
         if ctrl and shift and event.key() == Qt.Key.Key_V:
             self.paste_plain()
             return

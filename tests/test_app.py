@@ -14,8 +14,8 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QMimeData, QPoint, Qt  # noqa: E402
-from PySide6.QtGui import QImage, QTextCursor  # noqa: E402
+from PySide6.QtCore import QEvent, QMimeData, QPoint, Qt  # noqa: E402
+from PySide6.QtGui import QImage, QKeyEvent, QTextCursor  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 QMessageBox.question = staticmethod(lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
@@ -137,6 +137,49 @@ def main() -> int:
         check(saved.is_file(), f"스샷 PNG가 저장되지 않음: {saved}")
         original = QImage(str(saved))
         check(original.width() == 1400, f"원본 해상도가 보존되지 않음: {original.width()}")
+
+    # --- Ctrl+V 를 누르고 있어도 한 장만 들어가야 한다 -----------------
+    # 키 반복이 그대로 붙여넣기로 이어져 같은 스샷이 여러 장 쌓이던 회귀 경로.
+    app.clipboard().setImage(screenshot(240, 120))
+
+    def send_ctrl_v(auto_repeat: bool) -> None:
+        app.sendEvent(editor, QKeyEvent(
+            QEvent.Type.KeyPress, Qt.Key.Key_V,
+            Qt.KeyboardModifier.ControlModifier, "v", auto_repeat, 1,
+        ))
+        app.processEvents()
+
+    QTest.keyClick(editor, Qt.Key.Key_Return)
+    before = len(editor._image_names())
+    send_ctrl_v(False)                      # 처음 눌린 순간
+    for _ in range(4):
+        send_ctrl_v(True)                   # 눌린 채 반복되는 입력
+    held = len(editor._image_names()) - before
+    check(held == 1, f"Ctrl+V 를 누르고 있자 스샷이 {held}장 들어감 (1장이어야 함)")
+
+    # 반대로 따로따로 누른 것은 의도한 반복이므로 그대로 들어가야 한다.
+    before = len(editor._image_names())
+    for _ in range(2):
+        send_ctrl_v(False)
+    tapped = len(editor._image_names()) - before
+    check(tapped == 2, f"따로 누른 붙여넣기가 막힘: {tapped}장 (2장이어야 함)")
+
+    # 글자 키 반복까지 막아버리면 안 된다 (지우기를 길게 누르는 경우).
+    type_text(editor, "지울글자")
+    for _ in range(3):
+        app.sendEvent(editor, QKeyEvent(
+            QEvent.Type.KeyPress, Qt.Key.Key_Backspace,
+            Qt.KeyboardModifier.NoModifier, "", True, 1,
+        ))
+    app.processEvents()
+    check(not editor.textCursor().block().text().endswith("지울글자"),
+          "Backspace 키 반복까지 막혔다")
+
+    # 뒤 검사를 위해 추가로 붙인 스샷들을 되돌린다.
+    while len(editor._image_names()) > 1:
+        editor.undo()
+    app.processEvents()
+    editor.moveCursor(QTextCursor.MoveOperation.End)
 
     widths = []
     block = editor.document().begin()
