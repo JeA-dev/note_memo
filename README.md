@@ -225,8 +225,21 @@ run 플래그는 `b`(굵게) `i`(기울임) `u`(밑줄) `s`(취소선) `hl`(형�
 **제목과 본문이 모두 빈** 날은 파일을 만들지 않습니다. 제목만 적어둔 날은 파일이 남습니다.
 노트를 통째로 지우면 파일도 지워집니다.
 
-**지운 스샷 파일은 자동으로 삭제하지 않습니다.** 실수로 지웠을 때 되살릴 수 있게 하기 위해서인데,
-용량이 신경 쓰이면 `images\` 안의 날짜 폴더를 직접 정리하면 됩니다.
+**지운 스샷 파일은 자동으로 삭제하지 않습니다.** 실수로 지웠을 때 되살릴 수 있게 하기 위해서입니다.
+쌓인 파일을 정리하려면:
+
+```bash
+.venv\Scripts\python.exe -m tools.clean_orphans
+```
+
+어느 노트에서도 참조하지 않는 이미지·첨부파일을 찾아 보여줍니다. 기본은 미리보기라
+파일을 건드리지 않고, `--apply` 를 붙이면 `_orphans_<시각>\` 폴더로 **옮깁니다**(지우지 않습니다).
+확인한 뒤 그 폴더를 직접 지우면 공간이 확보됩니다.
+
+- 노트 하나라도 읽지 못하면 **아무것도 건드리지 않고 멈춥니다** — 그 노트가 쓰는 파일을
+  고아로 잘못 치울 수 있기 때문입니다.
+- 최근 10분 안에 만들어진 파일은 건드리지 않습니다. 방금 붙여 아직 저장되지 않은
+  스샷이 휩쓸리지 않게 하기 위해서입니다.
 
 ## 테스트
 
@@ -242,10 +255,15 @@ run 플래그는 `b`(굵게) `i`(기울임) `u`(밑줄) `s`(취소선) `hl`(형�
 .venv\Scripts\python.exe -m tests.test_attachment
 ```
 
+```bash
+.venv\Scripts\python.exe -m tests.test_clean_orphans
+```
+
 `test_serializer` 는 블록 JSON ↔ 문서 왕복이 정확한지(데이터 유실이 없는지),
 `test_app` 은 창을 오프스크린으로 띄워 붙여넣기·서식·저장·복원 배선을,
-`test_attachment` 는 첨부파일 복사·메타데이터·삭제를 검증합니다.
-둘 다 임시 폴더를 쓰므로 실제 노트를 건드리지 않습니다.
+`test_attachment` 는 첨부파일 복사·메타데이터·삭제를,
+`test_clean_orphans` 는 고아 파일 정리가 참조된 파일을 건드리지 않는지 검증합니다.
+모두 임시 폴더를 쓰므로 실제 노트를 건드리지 않습니다.
 
 디자인을 눈으로 확인하려면 (오프스크린에는 폰트가 없으므로 실제 플랫폼으로 실행):
 
@@ -291,6 +309,7 @@ QT_QPA_PLATFORM=windows .venv/Scripts/python.exe -m tests.preview_shot preview.p
 | `notememo/main_window.py` | 조립, 자동저장, 단축키 |
 | `tools/build_exe.py` | 배포용 단일 실행 파일 빌드 |
 | `tools/make_screenshots.py` | README 용 화면 이미지(`docs/`) 생성 |
+| `tools/clean_orphans.py` | 참조가 끊긴 이미지·첨부파일 정리 (기본은 미리보기) |
 | `tools/convert_space_indent.py` | 공백으로 맞춘 들여쓰기를 `indent` 로 변환 (기본은 미리보기) |
 | `tools/make_icon.py` | 바로가기 아이콘(`assets/note_memo.ico`) 생성 |
 | `tools/create_shortcut.ps1` | 바탕화면 바로가기 생성 |
