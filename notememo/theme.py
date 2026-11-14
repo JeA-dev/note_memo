@@ -39,6 +39,20 @@ DOC_MARGIN = 44        # QTextDocument 여백
 CONTENT_WIDTH = 780
 
 
+def body_font():
+    """본문 기본 글꼴. 에디터 문서의 기본 폰트로 쓴다.
+
+    앱 전역 폰트는 사이드바·툴바 치수에 맞춰 이보다 한 단계 작다. 그걸 문서가
+    물려받으면 크기를 명시하지 않은 글자가 본문 크기보다 작게 그려진다.
+    """
+    from PySide6.QtGui import QFont
+
+    font = QFont()
+    font.setFamilies(SANS_STACK)
+    font.setPointSize(BODY_PT)
+    return font
+
+
 def clamp_size(point: int | float | None) -> int:
     """지원하는 크기로 맞춘다. None 이나 범위 밖이면 가장 가까운 값."""
     if not point or point <= 0:

@@ -242,6 +242,9 @@ def step_indent(editor, delta: int) -> None:
     last = document.findBlock(end)
 
     worker = QTextCursor(document)
+    # Qt 는 beginEditBlock 시점의 커서 위치를 되돌리기 기록에 남긴다. 위치를 먼저
+    # 잡지 않으면 Ctrl+Z 때 커서가 문서 맨 앞(0)으로 가서 화면이 위로 튄다.
+    worker.setPosition(block.position())
     worker.beginEditBlock()
     while block.isValid():
         if read_block_type(block)[0] != DIVIDER:
@@ -306,6 +309,9 @@ def apply_block_type(
     cursor_kwargs = flags_to_kwargs(read_char_flags(cursor.charFormat()))
 
     worker = QTextCursor(doc)
+    # Qt 는 beginEditBlock 시점의 커서 위치를 되돌리기 기록에 남긴다. 위치를 먼저
+    # 잡지 않으면 Ctrl+Z 때 커서가 문서 맨 앞(0)으로 가서 화면이 위로 튄다.
+    worker.setPosition(block.position())
     worker.beginEditBlock()
     while block.isValid():
         keep_checked = checked

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as _dt
 
-from PySide6.QtCore import QPointF, QTimer, QUrl, Qt, Signal
+from PySide6.QtCore import QEvent, QPointF, QTimer, QUrl, Qt, Signal
 from PySide6.QtGui import (
     QColor,
     QDesktopServices,
@@ -52,6 +52,7 @@ class NoteEditor(QTextEdit):
         self._right_margin = -1
 
         self.document().setDocumentMargin(theme.DOC_MARGIN)
+        self._pin_document_font()
         fmt.register_star_resources(self.document())
         self.setCurrentCharFormat(fmt.char_format())
 
@@ -95,6 +96,23 @@ class NoteEditor(QTextEdit):
 
     def blocks(self) -> list[dict]:
         return serializer.document_to_blocks(self.document())
+
+    def _pin_document_font(self) -> None:
+        """문서 기본 폰트를 본문 크기로 못박는다.
+
+        앱 전역 폰트는 사이드바·툴바 치수에 맞춰 본문보다 한 단계 작다.
+        QTextEdit 는 위젯 폰트가 바뀔 때마다 그 값을 문서 기본 폰트로 밀어 넣으므로,
+        그대로 두면 크기를 명시하지 않은 글자가 툴바 표시(11)보다 작게 그려진다.
+        """
+        wanted = theme.body_font()
+        if self.document().defaultFont() != wanted:
+            self.document().setDefaultFont(wanted)
+
+    def changeEvent(self, event) -> None:  # noqa: N802
+        super().changeEvent(event)
+        # 스타일시트가 적용되면 위젯 폰트가 바뀌고, 그때 문서 기본 폰트도 덮어써진다.
+        if event.type() == QEvent.Type.FontChange:
+            self._pin_document_font()
 
     def content_width(self) -> int:
         """본문 텍스트가 실제로 쓸 수 있는 픽셀 폭.

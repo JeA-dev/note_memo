@@ -242,6 +242,35 @@ def main() -> int:
     check(editor.textCursor().block().text() == "들여쓴 문단",
           "Tab 이 글자를 건드림 (공백이 들어갔다)")
 
+    # --- 되돌리기가 커서를 문서 맨 앞으로 끌고 가면 안 된다 -----------
+    # Qt 는 beginEditBlock 시점의 커서 위치를 되돌리기 기록에 남긴다. 작업용 커서를
+    # 위치시키기 전에 beginEditBlock 을 부르면 Ctrl+Z 때 커서가 0 으로 가고
+    # 화면이 메모 맨 위로 튀던 회귀 경로.
+    for label, action in (
+        ("Tab 들여쓰기", lambda: QTest.keyClick(editor, Qt.Key.Key_Tab)),
+        ("목록 토글", lambda: window._block(fmt.BULLET)),
+        ("체크박스 토글", lambda: window._block(fmt.TODO)),
+    ):
+        anchor = editor.textCursor().block().position()
+        action()
+        app.processEvents()
+        editor.undo()
+        app.processEvents()
+        landed = editor.textCursor().position()
+        check(landed >= anchor,
+              f"{label} 되돌리기 후 커서가 위로 튐: {landed} < 문단 시작 {anchor}")
+
+    # 되돌린 뒤에도 문단 내용과 들여쓰기가 그대로여야 한다.
+    check(editor.textCursor().block().text() == "들여쓴 문단",
+          "되돌리기가 글자를 망가뜨림")
+
+    # --- 크기를 지정하지 않은 글자도 본문 크기로 그려져야 한다 ---------
+    # 앱 전역 폰트(BODY_PT - 1)를 문서가 물려받아, 툴바는 11 이라는데 실제로는
+    # 한 단계 작게 그려지던 회귀 경로.
+    check(editor.document().defaultFont().pointSize() == theme.BODY_PT,
+          f"문서 기본 폰트가 본문 크기가 아님: "
+          f"{editor.document().defaultFont().pointSize()} != {theme.BODY_PT}")
+
     # 목록 항목에서 Backspace 로 빠져나가면 Qt 가 들여쓰기를 넣어 위치를 유지한다.
     # 그 값을 저장하지 않아 다시 열면 줄이 왼쪽으로 튀던 회귀 경로.
     QTest.keyClick(editor, Qt.Key.Key_Return)
