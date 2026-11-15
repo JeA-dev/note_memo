@@ -423,11 +423,18 @@ class NoteEditor(QTextEdit):
             return
         if event.key() == Qt.Key.Key_Space and not ctrl and fmt.try_autoformat(self):
             return
-        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and not shift:
-            if fmt.try_divider_autoformat_on_enter(self):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            # Shift+Enter 는 구분선 블록에 줄바꿈 문자를 넣어 구분선을 지워버리므로
+            # 같이 가로챈다. 구분선 위에 빈 줄을 만드는 동작으로 통일한다.
+            if fmt.try_divider_enter(self):
                 return
-            if fmt.try_list_exit(self):
-                return
+            if not shift:
+                if fmt.try_divider_autoformat_on_enter(self):
+                    return
+                if fmt.try_list_exit(self):
+                    return
+                if fmt.try_empty_line_enter(self):
+                    return
 
         # 구분선 블록에서 글자를 입력하면 일반 본문 문단으로 전환
         cur = self.textCursor()

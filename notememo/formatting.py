@@ -670,6 +670,75 @@ def try_autoformat(editor) -> bool:
     return False
 
 
+def try_empty_line_enter(editor) -> bool:
+    """빈 본문 줄에서 Enter 를 눌렀을 때 줄을 직접 늘린다. 처리했으면 True.
+
+    Qt 는 '빈 블록 + 기본값이 아닌 블록 서식' 에서 Enter 를 누르면 줄을 늘리는 대신
+    블록 서식을 지운다(목록에서 빠져나오라는 뜻). 이 앱은 목록 빠져나오기를
+    try_list_exit 에서 이미 직접 처리하므로, 이 규칙은 'Enter 가 한 번 먹지 않는다'
+    는 증상으로만 나타난다. 저장 후 다시 연 노트는 모든 블록이 명시적 서식을 갖기
+    때문에 빈 줄마다 이 증상이 생긴다.
+    """
+    cursor = editor.textCursor()
+    if cursor.hasSelection():
+        return False
+    block = cursor.block()
+    if block.text() or read_block_type(block)[0] != TEXT:
+        return False
+    if not block.blockFormat().properties():
+        return False                       # 기본 서식이면 Qt 기본 동작이 이미 맞다
+
+    block_fmt = QTextBlockFormat(block.blockFormat())
+    char_fmt = QTextCharFormat(editor.currentCharFormat())
+    cursor.beginEditBlock()
+    cursor.insertBlock(block_fmt, char_fmt)
+    cursor.endEditBlock()
+    editor.setTextCursor(cursor)
+    editor.setCurrentCharFormat(char_fmt)
+    editor.ensureCursorVisible()
+    return True
+
+
+def try_divider_enter(editor) -> bool:
+    """구분선 줄에서 Enter: 구분선 위에 빈 본문 줄을 만들고 커서를 그리로 옮긴다.
+
+    구분선은 '빈 블록 + 블록 서식' 이라서 Qt 기본 동작에 맡기면 블록을 쪼개면서
+    구분선 서식까지 복제한다. 그래서 구분선이 하나 더 생기고, 한 번 더 누르면
+    이번엔 Qt 가 빈 블록의 서식을 지워버려 구분선이 사라진다. 양쪽 서식을 직접
+    지정해 Qt 의 서식 상속에 기대지 않는다.
+    """
+    cursor = editor.textCursor()
+    if cursor.hasSelection():
+        return False
+    block = cursor.block()
+    if read_block_type(block)[0] != DIVIDER:
+        return False
+
+    style = read_divider_style(block)
+    doc = editor.document()
+    number = block.blockNumber()
+
+    worker = QTextCursor(doc)
+    # 위치를 먼저 잡아야 Ctrl+Z 때 커서가 문서 맨 앞으로 튀지 않는다.
+    worker.setPosition(block.position())
+    worker.beginEditBlock()
+    worker.insertBlock()
+    above = QTextCursor(doc.findBlockByNumber(number))
+    above.setBlockFormat(block_format(TEXT))
+    above.setBlockCharFormat(char_format())
+    QTextCursor(doc.findBlockByNumber(number + 1)).setBlockFormat(
+        block_format(DIVIDER, divider_style=style)
+    )
+    worker.endEditBlock()
+
+    moved = QTextCursor(doc)
+    moved.setPosition(doc.findBlockByNumber(number).position())
+    editor.setTextCursor(moved)
+    editor.setCurrentCharFormat(char_format())
+    editor.ensureCursorVisible()
+    return True
+
+
 def try_divider_autoformat_on_enter(editor) -> bool:
     """줄 전체가 '---', '***', '___' (3개 이상)일 때 Enter를 누르면 구분선으로 치환."""
     cursor = editor.textCursor()
