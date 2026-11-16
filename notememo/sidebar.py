@@ -4,8 +4,16 @@ from __future__ import annotations
 
 import datetime as _dt
 
-from PySide6.QtCore import QDate, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPalette, QTextCharFormat
+from PySide6.QtCore import QDate, QPointF, QSize, Qt, Signal
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QFontMetrics,
+    QPalette,
+    QTextCharFormat,
+    QTextLayout,
+    QTextOption,
+)
 from PySide6.QtWidgets import (
     QCalendarWidget,
     QLabel,
@@ -13,6 +21,8 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMenu,
+    QStyleOptionViewItem,
+    QStyledItemDelegate,
     QVBoxLayout,
     QWidget,
 )
@@ -28,10 +38,126 @@ def _to_date(qdate: QDate) -> _dt.date:
     return _dt.date(qdate.year(), qdate.month(), qdate.day())
 
 
+DATE_ROLE = Qt.ItemDataRole.UserRole + 1     # 항목에 함께 그릴 날짜 문자열
+
+
+class _NoteItemDelegate(QStyledItemDelegate):
+    """날짜 한 줄 + 제목(접어서 여러 줄)로 목록 항목을 그린다.
+
+    기본 델리게이트는 항목 높이를 실제로 그릴 때의 뷰포트 폭과 무관하게 정해 버린다.
+    그래서 폭이 모자라면 다음 줄로 넘기지 못하고 '...' 로 잘라 냈다. 목록을 다시
+    그리는 도중 스크롤바가 생기면 그 전에 들어간 항목만 넓은 폭으로 계산되기
+    때문에, 같은 목록 안에서 어떤 노트는 제목이 두 줄로 다 보이고 어떤 노트는
+    한 줄로 잘렸다. 접는 폭을 직접 계산해 모든 항목이 같은 규칙을 따르게 한다.
+    """
+
+    PAD_X = 9        # 기존 QSS 의 item padding 과 같은 값
+    PAD_Y = 7
+    GAP = 2          # 날짜 줄과 제목 사이
+    # 제목 줄 수 상한. storage 가 제목을 42자+줄임표로 이미 막아 두는데, 그 길이는
+    # 가장 넓게 잡아도(한글로 꽉 채워도) 세 줄이면 들어간다. 즉 이 상한 때문에
+    # 제목이 잘리는 일은 없고, 혹시 모를 경우를 위한 안전장치로만 둔다.
+    TITLE_LINES = 3
+
+    def initStyleOption(self, option, index) -> None:  # noqa: N802
+        # 글자는 아래에서 직접 그린다. 기본 델리게이트에는 배경과 선택 표시만 맡긴다.
+        super().initStyleOption(option, index)
+        option.text = ""
+
+    def _wrap_width(self, option) -> int:
+        """글자를 접을 폭. 크기 계산과 그리기가 반드시 같은 값을 써야 한다."""
+        view = option.widget
+        # 항목 가로폭은 뷰포트 폭 그대로다 (QSS 의 item margin 은 빠지지 않는다).
+        width = view.viewport().width() if view is not None else option.rect.width()
+        if width <= 0:
+            width = option.rect.width()
+        return max(40, width - 2 * self.PAD_X)
+
+    def _title_lines(self, title: str, option, width: int) -> list[str]:
+        """제목을 최대 TITLE_LINES 줄로 접는다. 넘치면 마지막 줄을 '…' 로 줄인다."""
+        if not title:
+            return [""]
+        metrics = QFontMetrics(option.font)
+        text_option = QTextOption()
+        text_option.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+
+        layout = QTextLayout(title, option.font)
+        layout.setTextOption(text_option)
+        layout.beginLayout()
+        spans: list[tuple[int, int]] = []
+        offset = 0.0
+        while len(spans) < self.TITLE_LINES:
+            line = layout.createLine()
+            if not line.isValid():
+                break
+            line.setLineWidth(width)
+            # 줄 위치를 정해 주지 않으면 Qt 가 다음 줄을 만들지 않고 멈춘다.
+            line.setPosition(QPointF(0.0, offset))
+            offset += line.height()
+            spans.append((line.textStart(), line.textLength()))
+        layout.endLayout()
+
+        if not spans:
+            return [""]
+        lines = [title[start:start + length] for start, length in spans]
+        consumed = spans[-1][0] + spans[-1][1]
+        if consumed < len(title):
+            # 아직 남은 글자가 있다 = 두 줄로도 모자란다. 마지막 줄만 줄여 표시한다.
+            lines[-1] = metrics.elidedText(
+                title[spans[-1][0]:], Qt.TextElideMode.ElideRight, width
+            )
+        return lines
+
+    def _layout(self, option, index) -> tuple[str, list[str], QFontMetrics]:
+        metrics = QFontMetrics(option.font)
+        date_text = str(index.data(DATE_ROLE) or "")
+        title = str(index.data(Qt.ItemDataRole.DisplayRole) or "")
+        return date_text, self._title_lines(title, option, self._wrap_width(option)), metrics
+
+    def sizeHint(self, option, index) -> QSize:  # noqa: N802
+        opt = self._prepared(option, index)
+        _, lines, metrics = self._layout(opt, index)
+        height = self.PAD_Y * 2 + metrics.height() * (1 + len(lines)) + self.GAP
+        return QSize(self._wrap_width(opt) + 2 * self.PAD_X, height)
+
+    def _prepared(self, option, index):
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        return opt
+
+    def paint(self, painter, option, index) -> None:
+        opt = self._prepared(option, index)
+        super().paint(painter, opt, index)           # 배경·선택·호버
+
+        date_text, lines, metrics = self._layout(opt, index)
+        width = self._wrap_width(opt)
+        x = opt.rect.left() + self.PAD_X
+        y = opt.rect.top() + self.PAD_Y
+
+        painter.save()
+        painter.setFont(opt.font)
+        painter.setPen(QColor(theme.PALETTE["ink_soft"]))
+        painter.drawText(x, y + metrics.ascent(), metrics.elidedText(
+            date_text, Qt.TextElideMode.ElideRight, width))
+        y += metrics.height() + self.GAP
+
+        painter.setPen(QColor(theme.PALETTE["ink"]))
+        for line in lines:
+            painter.drawText(x, y + metrics.ascent(), line)
+            y += metrics.height()
+        painter.restore()
+
+
 class _NoteListWidget(QListWidget):
     """Delete 키로 선택된 노트를 삭제할 수 있는 리스트 위젯."""
 
     deletePressed = Signal(object)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        # 스크롤바가 생기거나 사라지면 접히는 폭이 달라진다. 높이를 다시 재게 한다.
+        super().resizeEvent(event)
+        if event.oldSize().width() != event.size().width():
+            self.scheduleDelayedItemsLayout()
 
     def keyPressEvent(self, event) -> None:
         if event.key() == Qt.Key.Key_Delete:
@@ -84,6 +210,7 @@ class Sidebar(QWidget):
         self.note_list.setObjectName("NoteList")
         self.note_list.setUniformItemSizes(False)
         self.note_list.setWordWrap(True)
+        self.note_list.setItemDelegate(_NoteItemDelegate(self.note_list))
         self.note_list.itemClicked.connect(self._on_item_clicked)
         self.note_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.note_list.customContextMenuRequested.connect(self._show_context_menu)
@@ -140,7 +267,8 @@ class Sidebar(QWidget):
         self.note_list.clear()
         for date in dates:
             title = storage.title_of(date) or "제목 없음"
-            item = QListWidgetItem(f"{config.format_short(date)}\n{title}")
+            item = QListWidgetItem(title)
+            item.setData(DATE_ROLE, config.format_short(date))
             item.setData(Qt.ItemDataRole.UserRole, date)
             self.note_list.addItem(item)
         if self._current is not None:
