@@ -12,7 +12,7 @@
 ## 실행
 
 ```bash
-git clone https://github.com/ssibseggi-dev/note_memo.git
+git clone https://github.com/JeA-dev/note_memo.git
 ```
 
 받은 폴더의 **`run.bat`** 을 더블클릭하세요.
