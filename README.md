@@ -55,6 +55,12 @@ powershell -ExecutionPolicy Bypass -File tools\create_shortcut.ps1
 **원본 해상도 PNG는 따로 보관**되므로 이미지를 더블클릭하면 기본 뷰어에서 원본 크기로 열립니다.
 이미지 파일을 복사하거나 창으로 끌어다 놓아도 똑같이 들어갑니다.
 
+> 글자를 넣을 때 `currentCharFormat()` 을 그대로 쓰면 안 됩니다. 커서가 이미지 바로 뒤에
+> 있으면 그게 **이미지 서식**이라, Qt 가 넣은 글자마다 그 이미지를 그립니다. 글자는 보이지
+> 않고 앞의 스샷만 글자 수만큼 늘어나며, 저장할 때도 글자가 아니라 이미지 run 으로 적혀
+> **글자가 영영 사라집니다**. 붙여넣기는 `formatting.text_char_format()` 으로 서식을 받아
+> 이미지 서식을 물려받지 않습니다. (타이핑은 Qt 가 알아서 서식을 바꿔 줘서 영향이 없습니다.)
+
 ## 파일 첨부
 
 스샷이 아닌 파일(PDF·동영상·문서 등)은 본문에 넣지 않고 노트에 **붙여** 둡니다.
@@ -282,12 +288,17 @@ run 플래그는 `b`(굵게) `i`(기울임) `u`(밑줄) `s`(취소선) `hl`(형�
 .venv\Scripts\python.exe -m tests.test_sidebar
 ```
 
+```bash
+.venv\Scripts\python.exe -m tests.test_paste
+```
+
 `test_serializer` 는 블록 JSON ↔ 문서 왕복이 정확한지(데이터 유실이 없는지),
 `test_app` 은 창을 오프스크린으로 띄워 붙여넣기·서식·저장·복원 배선을,
 `test_attachment` 는 첨부파일 복사·메타데이터·삭제를,
 `test_clean_orphans` 는 고아 파일 정리가 참조된 파일을 건드리지 않는지,
 `test_divider` 는 구분선 위에서 `Enter` 를 눌러도 구분선이 복제되거나 사라지지 않는지,
-`test_sidebar` 는 최근 노트 목록에서 제목이 잘리지 않는지 검증합니다.
+`test_sidebar` 는 최근 노트 목록에서 제목이 잘리지 않는지,
+`test_paste` 는 스샷 뒤에 붙여넣은 글자가 이미지로 바뀌지 않는지 검증합니다.
 모두 임시 폴더를 쓰므로 실제 노트를 건드리지 않습니다.
 `test_sidebar` 는 글자 폭을 재야 하므로 오프스크린이 아니라 실제 플랫폼으로 실행됩니다.
 
