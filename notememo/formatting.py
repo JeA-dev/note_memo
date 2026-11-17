@@ -137,6 +137,20 @@ def flags_to_kwargs(flags: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def text_char_format(editor) -> QTextCharFormat:
+    """글자를 넣을 때 쓸 문자 서식. **이미지 서식은 절대 물려받지 않는다.**
+
+    커서가 이미지 바로 뒤에 있으면 currentCharFormat() 은 그 이미지의 서식이다.
+    그 서식으로 글자를 넣으면 Qt 가 글자마다 이미지를 그려서, 넣은 글자는 보이지
+    않고 앞의 스샷만 글자 수만큼 늘어난다. 저장할 때도 글자가 아니라 이미지 run
+    으로 적히기 때문에 글자가 영영 사라진다.
+    """
+    current = editor.currentCharFormat()
+    if current.isImageFormat() or current.hasProperty(QTextFormat.Property.ImageName):
+        return char_format()
+    return char_format(**flags_to_kwargs(read_char_flags(current)))
+
+
 # --- 블록 서식 -----------------------------------------------------
 
 MAX_INDENT = 12     # Qt 들여쓰기는 단계 값이다. 이상한 값이 들어오면 잘라낸다.

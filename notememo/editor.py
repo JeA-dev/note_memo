@@ -161,7 +161,9 @@ class NoteEditor(QTextEdit):
             return
 
         # 외부 HTML은 우리 스키마 밖의 서식을 끌고 오므로 평문으로만 받는다.
-        self.textCursor().insertText(source.text(), self.currentCharFormat())
+        # 서식은 text_char_format 으로 받는다. currentCharFormat() 을 그대로 쓰면
+        # 커서가 이미지 바로 뒤일 때 글자가 이미지 서식으로 들어가 사라져 버린다.
+        self.textCursor().insertText(source.text(), fmt.text_char_format(self))
 
     def paste_plain(self) -> None:
         self._force_plain = True
