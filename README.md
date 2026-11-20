@@ -1,7 +1,28 @@
-# 노트 메모 (note_memo)
+<h1 align="center">노트 메모</h1>
 
-날짜별로 노트가 한 장씩 생기는 윈도우용 다이어리 앱.
-**`Win`+`Shift`+`S` 로 캡쳐 → `Ctrl`+`V`** 두 단계로, 필기 중인 자리에 스크린샷이 바로 들어갑니다.
+<p align="center">
+  <b>캡쳐하고 붙여넣으면, 필기하던 그 자리에 스샷이 바로 들어가는 날짜별 다이어리.</b>
+</p>
+
+<p align="center">
+  <code>Win+Shift+S</code> 캡쳐 → <code>Ctrl+V</code> → 본문 폭에 맞춰 자동 축소 → <b>1.5초 뒤 자동 저장</b> → 날짜별 JSON
+</p>
+
+<p align="center">
+  <img alt="platform: Windows 10/11" src="https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4">
+  <img alt="Python 3.10+" src="https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white">
+  <img alt="PySide6 6.7+" src="https://img.shields.io/badge/PySide6-6.7+-41CD52?logo=qt&logoColor=white">
+  <img alt="외부 의존성 1개" src="https://img.shields.io/badge/dependencies-1-8C6A4A">
+  <img alt="테스트 8종 통과" src="https://img.shields.io/badge/tests-8%20suites%20passing-2E7D52">
+</p>
+
+<p align="center">
+  📖 <a href="#실행">설치와 실행</a> ·
+  ⌨️ <a href="#단축키">단축키</a> ·
+  🗂️ <a href="#저장-방식">저장 방식</a> ·
+  🧪 <a href="#테스트">테스트</a> ·
+  🧩 <a href="#구조">구조</a>
+</p>
 
 ![앱 화면](docs/screenshot-main.png)
 
@@ -288,6 +309,15 @@ run 플래그는 `b`(굵게) `i`(기울임) `u`(밑줄) `s`(취소선) `hl`(형�
 
 ## 테스트
 
+한 번에 다 돌리려면:
+
+```bash
+.venv\Scripts\python.exe -m tests.run_all
+```
+
+테스트마다 임시 저장 폴더와 Qt 플랫폼을 다르게 잡기 때문에 각각 따로 프로세스를 띄웁니다.
+하나씩 돌리려면:
+
 ```bash
 .venv\Scripts\python.exe -m tests.test_serializer
 ```
@@ -376,6 +406,7 @@ $env:QT_QPA_PLATFORM="windows"; .venv\Scripts\python.exe -m tests.preview_shot p
 | `notememo/layout.py` | 본문 단 폭에 맞춰 끝나는 가로줄 (헤더·툴바·상태줄 공용) |
 | `notememo/attachment.py` | 첨부파일 칩 목록 — 자동 줄바꿈 FlowLayout, 전체 목록 팝업 |
 | `notememo/main_window.py` | 조립, 자동저장, 단축키 |
+| `tests/run_all.py` | 테스트 전체 실행 (각각 따로 프로세스를 띄운다) |
 | `tools/build_exe.py` | 배포용 단일 실행 파일 빌드 |
 | `tools/make_screenshots.py` | README 용 화면 이미지(`docs/`) 생성 |
 | `tools/clean_orphans.py` | 참조가 끊긴 이미지·첨부파일 정리 (기본은 미리보기) |
