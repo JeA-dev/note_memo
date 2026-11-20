@@ -1,6 +1,8 @@
 """디자인 확인용: 샘플 노트를 채운 창을 PNG로 렌더링한다.
 
-    .venv\\Scripts\\python.exe -m tests.preview_shot [출력경로]
+오프스크린에는 폰트가 없어 글자가 네모로 나온다. 실제 플랫폼을 지정해서 실행한다.
+
+    $env:QT_QPA_PLATFORM="windows"; .venv\\Scripts\\python.exe -m tests.preview_shot [출력경로]
 """
 
 from __future__ import annotations

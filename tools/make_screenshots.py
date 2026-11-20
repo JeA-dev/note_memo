@@ -1,8 +1,9 @@
 """README 에 넣을 화면 이미지를 만든다.
 
-오프스크린에는 폰트가 없어 글자가 네모로 깨지므로 실제 플랫폼으로 실행해야 한다.
+오프스크린에는 폰트가 없어 글자가 네모로 깨지므로, 아래에서 실제 플랫폼을 직접 지정한다.
+환경변수를 미리 넣을 필요는 없다.
 
-    QT_QPA_PLATFORM=windows .venv\\Scripts\\python.exe -m tools.make_screenshots
+    .venv\\Scripts\\python.exe -m tools.make_screenshots
 
 결과: docs\\screenshot-*.png
 """
