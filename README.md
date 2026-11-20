@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <img alt="version 1.0.0" src="https://img.shields.io/badge/version-1.0.0-8C6A4A">
   <img alt="platform: Windows 10/11" src="https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4">
   <img alt="Python 3.10+" src="https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white">
   <img alt="PySide6 6.7+" src="https://img.shields.io/badge/PySide6-6.7+-41CD52?logo=qt&logoColor=white">
@@ -381,7 +382,20 @@ $env:QT_QPA_PLATFORM="windows"; .venv\Scripts\python.exe -m tests.preview_shot p
 .venv\Scripts\python.exe -m tools.build_exe
 ```
 
-`dist\노트메모.exe` (약 45MB) 가 나옵니다. 첫 실행 5~6초, 이후 3초입니다.
+두 파일이 나옵니다. 내용은 같고 이름만 다릅니다.
+
+| 파일 | 쓰임 |
+|---|---|
+| `dist\노트메모.exe` | 그냥 쓰거나 바로 넘길 때 |
+| `dist\노트메모-v1.0.0.exe` | **릴리스에 올릴 파일** — 받는 쪽에서 버전을 바로 알 수 있습니다 |
+
+약 47MB이고 첫 실행 5~6초, 이후 3초입니다. 버전은 `notememo/__init__.py` 의
+`__version__` 하나에서 나옵니다. 파일 이름과 **윈도우 파일 속성**(오른쪽 클릭 →
+속성 → 자세히)에 함께 박히므로, 올릴 때 따로 적을 것이 없습니다.
+
+> 서명하지 않은 exe 라서 처음 받아 실행하면 윈도우 SmartScreen 이
+> **"Windows의 PC 보호"** 경고를 띄웁니다. `추가 정보` → `실행`을 누르면 됩니다.
+> 배포할 때 이 안내를 함께 적어 주세요.
 
 > `.venv` 폴더는 **다른 컴퓨터로 복사해도 동작하지 않습니다** (이 컴퓨터의 파이썬 경로가
 > 절대경로로 박혀 있습니다). 소스를 넘길 때는 `.venv` 를 빼고 `run.bat` 이 새로 만들게 하세요.
