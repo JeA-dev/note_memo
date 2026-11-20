@@ -82,11 +82,13 @@ SAMPLE = [
 
 def seed() -> None:
     config.ensure_dirs()
+    # 제목 앞 [태그] 자동 색칠이 목록에서 어떻게 보이는지 같이 담는다.
+    side_titles = ["[배포] 롤백 절차 정리", "[회고] 주간 정리", "[배포] 캐시 무효화 점검"]
     for offset, blocks in ((0, SAMPLE), (1, None), (3, None), (4, None)):
         date = TODAY - _dt.timedelta(days=offset)
         if blocks is None:
             storage.save_note(date, storage.Note(
-                f"{config.format_short(date)} 메모",
+                side_titles.pop(0),
                 [{"type": "text", "runs": [{"text": "짧은 기록"}]}],
             ))
             continue

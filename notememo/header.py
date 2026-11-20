@@ -8,7 +8,7 @@ from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QLabel, QLineEdit, QToolButton, QVBoxLayout
 
-from . import config, theme
+from . import config, tags, theme
 from .layout import ColumnRow
 
 MAX_TITLE_LEN = 200
@@ -102,14 +102,29 @@ class NoteHeader(ColumnRow):
         self.title_input.setPlaceholderText("제목 없음")
         self.title_input.setMaxLength(MAX_TITLE_LEN)
         self.title_input.textEdited.connect(self.titleEdited)
+        self.title_input.textChanged.connect(self._apply_tag_color)
         self.title_input.returnPressed.connect(self.titleCommitted)
         layout.addWidget(self.title_input)
+        self._tag_color: str | None = None
 
         self.delete_button = _DeleteNoteButton(self)
         self.delete_button.clicked.connect(self.deleteRequested.emit)
         self.row.addWidget(
             self.delete_button, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         )
+
+    def _apply_tag_color(self) -> None:
+        """제목 앞 `[태그]` 색을 제목 줄 전체에 입힌다.
+
+        QLineEdit 은 일부 글자만 색을 바꿀 수 없다. 유일한 방법인 QInputMethodEvent
+        트릭은 한글 조합 중인 글자를 건드려서 쓰면 안 된다. 그래서 헤더에서는 제목
+        전체를 태그 색으로 칠하고, 태그만 따로 칠하는 것은 목록에서만 한다.
+        """
+        color = tags.title_color(self.title_input.text())
+        if color == self._tag_color:
+            return
+        self._tag_color = color
+        self.title_input.setStyleSheet(f"color: {color};" if color else "")
 
     def title(self) -> str:
         return self.title_input.text().strip()
@@ -121,6 +136,7 @@ class NoteHeader(ColumnRow):
         self.title_input.setText(title)
         self.title_input.setCursorPosition(0)
         self.title_input.blockSignals(blocked)
+        self._apply_tag_color()      # 로드 때는 textChanged 가 막혀 있어 직접 부른다
         self.set_delete_enabled(has_content)
 
     def set_delete_enabled(self, enabled: bool) -> None:

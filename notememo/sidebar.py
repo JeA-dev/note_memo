@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import config, storage, theme
+from . import config, storage, tags, theme
 
 
 def _to_qdate(date: _dt.date) -> QDate:
@@ -73,20 +73,38 @@ class _NoteItemDelegate(QStyledItemDelegate):
             width = option.rect.width()
         return max(40, width - 2 * self.PAD_X)
 
-    def _title_lines(self, title: str, option, width: int) -> list[str]:
-        """제목을 최대 TITLE_LINES 줄로 접는다. 넘치면 마지막 줄을 '…' 로 줄인다."""
-        if not title:
-            return [""]
-        metrics = QFontMetrics(option.font)
+    @staticmethod
+    def _tag_formats(text: str) -> list:
+        """제목 안 `[태그]` 구간마다 색과 굵기를 지정한다.
+
+        QTextLayout 에 서식을 쥐어 주면 접는 폭 계산과 그리기가 같은 글꼴을 쓰므로,
+        굵게 해도 줄바꿈 위치가 어긋나지 않는다.
+        """
+        formats = []
+        for start, end, name in tags.tag_spans(text):
+            char_format = QTextCharFormat()
+            char_format.setForeground(QColor(tags.color_for(name)))
+            char_format.setFontWeight(QFont.Weight.Bold)
+            span = QTextLayout.FormatRange()
+            span.start = start
+            span.length = end - start
+            span.format = char_format
+            formats.append(span)
+        return formats
+
+    def _build_layout(self, text: str, option, width: int):
+        """최대 TITLE_LINES 줄까지 접은 레이아웃. (레이아웃, 줄 수, 소비한 글자 수)."""
         text_option = QTextOption()
         text_option.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
 
-        layout = QTextLayout(title, option.font)
+        layout = QTextLayout(text, option.font)
         layout.setTextOption(text_option)
+        layout.setFormats(self._tag_formats(text))
         layout.beginLayout()
-        spans: list[tuple[int, int]] = []
+        lines = 0
+        consumed = 0
         offset = 0.0
-        while len(spans) < self.TITLE_LINES:
+        while lines < self.TITLE_LINES:
             line = layout.createLine()
             if not line.isValid():
                 break
@@ -94,30 +112,38 @@ class _NoteItemDelegate(QStyledItemDelegate):
             # 줄 위치를 정해 주지 않으면 Qt 가 다음 줄을 만들지 않고 멈춘다.
             line.setPosition(QPointF(0.0, offset))
             offset += line.height()
-            spans.append((line.textStart(), line.textLength()))
+            consumed = line.textStart() + line.textLength()
+            lines += 1
         layout.endLayout()
+        return layout, max(lines, 1), consumed
 
-        if not spans:
-            return [""]
-        lines = [title[start:start + length] for start, length in spans]
-        consumed = spans[-1][0] + spans[-1][1]
-        if consumed < len(title):
-            # 아직 남은 글자가 있다 = 두 줄로도 모자란다. 마지막 줄만 줄여 표시한다.
-            lines[-1] = metrics.elidedText(
-                title[spans[-1][0]:], Qt.TextElideMode.ElideRight, width
-            )
-        return lines
+    def _title_layout(self, title: str, option, width: int):
+        """제목 레이아웃. 줄 수 상한을 넘치면 '…' 로 줄여 다시 접는다."""
+        text = title or ""
+        layout, lines, consumed = self._build_layout(text, option, width)
+        if text and consumed < len(text):
+            metrics = QFontMetrics(option.font)
+            head = text[:consumed]
+            tail = metrics.elidedText(text[consumed:], Qt.TextElideMode.ElideRight, width)
+            layout, lines, _ = self._build_layout(head + tail, option, width)
+        return layout, lines
 
-    def _layout(self, option, index) -> tuple[str, list[str], QFontMetrics]:
-        metrics = QFontMetrics(option.font)
-        date_text = str(index.data(DATE_ROLE) or "")
-        title = str(index.data(Qt.ItemDataRole.DisplayRole) or "")
-        return date_text, self._title_lines(title, option, self._wrap_width(option)), metrics
+    def _title_lines(self, title: str, option, width: int) -> list[str]:
+        """제목이 실제로 어떤 줄들로 그려지는지. 테스트와 높이 계산에 쓴다."""
+        layout, _ = self._title_layout(title, option, width)
+        text = layout.text()
+        out = []
+        for i in range(layout.lineCount()):
+            line = layout.lineAt(i)
+            out.append(text[line.textStart():line.textStart() + line.textLength()])
+        return out or [""]
 
     def sizeHint(self, option, index) -> QSize:  # noqa: N802
         opt = self._prepared(option, index)
-        _, lines, metrics = self._layout(opt, index)
-        height = self.PAD_Y * 2 + metrics.height() * (1 + len(lines)) + self.GAP
+        metrics = QFontMetrics(opt.font)
+        title = str(index.data(Qt.ItemDataRole.DisplayRole) or "")
+        _, lines = self._title_layout(title, opt, self._wrap_width(opt))
+        height = self.PAD_Y * 2 + metrics.height() * (1 + lines) + self.GAP
         return QSize(self._wrap_width(opt) + 2 * self.PAD_X, height)
 
     def _prepared(self, option, index):
@@ -129,7 +155,9 @@ class _NoteItemDelegate(QStyledItemDelegate):
         opt = self._prepared(option, index)
         super().paint(painter, opt, index)           # 배경·선택·호버
 
-        date_text, lines, metrics = self._layout(opt, index)
+        metrics = QFontMetrics(opt.font)
+        date_text = str(index.data(DATE_ROLE) or "")
+        title = str(index.data(Qt.ItemDataRole.DisplayRole) or "")
         width = self._wrap_width(opt)
         x = opt.rect.left() + self.PAD_X
         y = opt.rect.top() + self.PAD_Y
@@ -142,9 +170,8 @@ class _NoteItemDelegate(QStyledItemDelegate):
         y += metrics.height() + self.GAP
 
         painter.setPen(QColor(theme.PALETTE["ink"]))
-        for line in lines:
-            painter.drawText(x, y + metrics.ascent(), line)
-            y += metrics.height()
+        layout, _ = self._title_layout(title, opt, width)
+        layout.draw(painter, QPointF(x, y))          # 태그 색은 레이아웃이 입힌다
         painter.restore()
 
 
