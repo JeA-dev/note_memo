@@ -18,6 +18,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/JeA-dev/note_memo/releases/latest"><b>📦 실행 파일 받기</b></a> ·
   📖 <a href="#실행">설치와 실행</a> ·
   ⌨️ <a href="#단축키">단축키</a> ·
   🗂️ <a href="#저장-방식">저장 방식</a> ·
@@ -32,6 +33,12 @@
 이미지 라이브러리도 필요 없습니다.
 
 ## 실행
+
+파이썬 없이 바로 쓰려면 [**릴리스에서 실행 파일**](https://github.com/JeA-dev/note_memo/releases/latest)을
+받아 더블클릭하세요. 설치 과정이 없고, 파이썬이나 Visual C++ 재배포 패키지도 필요 없습니다.
+서명하지 않은 exe 라 처음 실행할 때 윈도우가 경고를 띄우는데, `추가 정보` → `실행` 을 누르면 됩니다.
+
+소스로 돌리려면:
 
 ```bash
 git clone https://github.com/JeA-dev/note_memo.git
@@ -387,7 +394,10 @@ $env:QT_QPA_PLATFORM="windows"; .venv\Scripts\python.exe -m tests.preview_shot p
 | 파일 | 쓰임 |
 |---|---|
 | `dist\노트메모.exe` | 그냥 쓰거나 바로 넘길 때 |
-| `dist\노트메모-v1.0.0.exe` | **릴리스에 올릴 파일** — 받는 쪽에서 버전을 바로 알 수 있습니다 |
+| `dist\NoteMemo-v1.0.0-win64.exe` | **릴리스에 올릴 파일** |
+
+> 릴리스용 파일 이름이 영문인 이유: 깃허브는 릴리스 첨부 파일명에서 **한글을 통째로 지웁니다.**
+> `노트메모-v1.0.0.exe` 를 올리면 받는 쪽에는 `-v1.0.0.exe` 로 보입니다.
 
 약 47MB이고 첫 실행 5~6초, 이후 3초입니다. 버전은 `notememo/__init__.py` 의
 `__version__` 하나에서 나옵니다. 파일 이름과 **윈도우 파일 속성**(오른쪽 클릭 →

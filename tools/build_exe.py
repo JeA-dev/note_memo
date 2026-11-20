@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT))
 from notememo import __version__ as VERSION  # noqa: E402
 
 NAME = "노트메모"
+ASCII_NAME = "NoteMemo"      # 릴리스 첨부용 (깃허브가 한글 파일명을 지운다)
 
 # 윈도우 파일 속성(오른쪽 클릭 → 속성 → 자세히)에 박히는 정보.
 # 0x0412 = 한국어, 0x04B0(1200) = 유니코드.
@@ -108,9 +109,10 @@ def main() -> int:
     size = exe.stat().st_size / (1024 * 1024)
     print(f"\n완료: {exe}  ({size:.0f}MB)")
 
-    # 릴리스에 올릴 파일은 버전을 파일명에 달아 둔다. 받는 쪽에서 무엇을 받았는지
-    # 바로 알 수 있고, 여러 버전을 올려도 섞이지 않는다.
-    release = ROOT / "dist" / f"{NAME}-v{VERSION}.exe"
+    # 릴리스에 올릴 파일은 이름을 영문으로 둔다. 깃허브는 릴리스 첨부 파일명에서
+    # 한글을 통째로 지워 버려서, '노트메모-v1.0.0.exe' 를 올리면 받는 쪽에는
+    # '-v1.0.0.exe' 로 보인다. 버전도 파일명에 달아 여러 버전이 섞이지 않게 한다.
+    release = ROOT / "dist" / f"{ASCII_NAME}-v{VERSION}-win64.exe"
     shutil.copy2(exe, release)
     print(f"릴리스용: {release}")
     return 0
