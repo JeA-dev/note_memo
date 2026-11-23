@@ -83,7 +83,7 @@ class _NoteItemDelegate(QStyledItemDelegate):
         formats = []
         for start, end, name in tags.tag_spans(text):
             char_format = QTextCharFormat()
-            char_format.setForeground(QColor(tags.color_for(name)))
+            char_format.setForeground(QColor(tags.color_of(name)))
             char_format.setFontWeight(QFont.Weight.Bold)
             span = QTextLayout.FormatRange()
             span.start = start
@@ -267,8 +267,17 @@ class Sidebar(QWidget):
         if current is not None:
             self._current = current
         self._dates = storage.list_note_dates()
+        self._assign_tag_colors()
         self._mark_calendar()
         self._rebuild_list()
+
+    def _assign_tag_colors(self) -> None:
+        """새로 생긴 태그에 색을 나눠 준다.
+
+        오래된 노트부터 넘겨야 이미 쓰던 태그의 색이 그대로 남는다
+        (_dates 는 최신순이라 뒤집는다).
+        """
+        tags.prime(storage.title_of(d) or "" for d in reversed(self._dates))
 
     def set_date(self, date: _dt.date) -> None:
         """시그널을 되쏘지 않고 캘린더 선택만 옮긴다."""

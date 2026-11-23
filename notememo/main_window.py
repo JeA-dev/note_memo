@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import config, storage, theme
+from . import config, storage, tags, theme
 from . import formatting as fmt
 from .attachment import AttachmentBar
 from .editor import NoteEditor
@@ -83,6 +83,7 @@ class MainWindow(QMainWindow):
         self._register_shortcuts()
 
         config.ensure_dirs()
+        tags.load()                      # 태그에 배정해 둔 색을 읽어온다
         self.go_to(_dt.date.today())
 
     # --- 레이아웃 ----------------------------------------------------

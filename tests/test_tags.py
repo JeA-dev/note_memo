@@ -60,22 +60,49 @@ def main() -> int:
     check(len(two) == 2, f"태그 두 개를 못 찾음: {two}")
     if len(two) == 2:
         check(two[0][2] == "js" and two[1][2] == "로컬ai", f"태그 이름이 다름: {two}")
-        check(tags.color_for(two[0][2]) != tags.color_for(two[1][2]),
-              "서로 다른 태그인데 같은 색이다")
+
+    # --- 서로 다른 태그는 서로 다른 색 (이 테스트의 핵심) ----------------
+    # 예전에는 이름을 해시해서 색을 골라, 태그 12개가 색 6개에 몰렸다.
+    names = ["js", "파이썬", "로컬ai", "git,github", "리눅스", "프롬프트",
+             "html/css", "크롤링", "영상편집자동화", "안티그래비티", "제미나이", "1차프로젝트"]
+    tags.prime(f"[{n}] 노트" for n in names)
+    colors = [tags.color_of(n) for n in names]
+    check(len(set(colors)) == len(names),
+          f"태그 {len(names)}개가 색 {len(set(colors))}개를 나눠 씀 (전부 달라야 한다)")
+    for name, color in zip(names, colors):
+        check(color in tags.TAG_COLORS, f"{name}: 팔레트에 없는 색 {color}")
+
+    # 팔레트를 다 쓰면 가장 적게 쓰인 색부터 다시 쓴다 (겹쳐도 고르게)
+    extra = [f"여분{i}" for i in range(len(tags.TAG_COLORS) + 3)]
+    tags.prime(f"[{n}] 노트" for n in extra)
+    counts = {}
+    for n in list(tags.assignments()):
+        counts[tags.color_of(n)] = counts.get(tags.color_of(n), 0) + 1
+    check(max(counts.values()) - min(counts.values()) <= 1,
+          f"색 쏠림: 가장 많이 {max(counts.values())}개 / 적게 {min(counts.values())}개")
 
     # --- 같은 태그는 같은 색, 표기가 달라도 같은 색 ----------------------
     same = {tags.title_color(t) for t in ("[ JS ] 복습", "[JS]복습", "[js] 복습", "[ js ] 복습")}
     check(len(same) == 1, f"표기만 다른 같은 태그인데 색이 갈린다: {same}")
     check(tags.title_color("태그 없는 제목") is None, "태그가 없는데 색이 나왔다")
-    for name in ("js", "로컬ai", "python", "css"):
-        check(tags.color_for(name) in theme_palette(),
-              f"{name}: 팔레트에 없는 색 {tags.color_for(name)}")
 
-    # --- 실행을 다시 해도 같은 색이어야 한다 (hash() 소금 실수 잡기) -----
+    # --- 한 번 정해진 색은 바뀌지 않는다 ---------------------------------
+    before = tags.assignments()
+    tags.save()
+    tags.load()
+    check(tags.assignments() == before, "저장했다 읽으면 배정이 달라진다")
+    tags.prime(["[새로운과목] 오늘", "[또다른것] 복습"])
+    after = tags.assignments()
+    check(all(after.get(k) == v for k, v in before.items()),
+          "새 태그가 생기자 기존 태그 색이 바뀌었다")
+
+    # --- 배정 전 임시 색은 실행을 다시 해도 같아야 한다 -------------------
+    # 제목을 타이핑하는 중에는 아직 배정되지 않은 태그가 잠깐 잡힌다.
+    # 파이썬 hash() 는 실행마다 값이 달라지므로 쓰면 안 된다.
     script = (
         "import sys; sys.path.insert(0, r'" + str(Path(__file__).resolve().parent.parent) + "');"
         "from notememo import tags;"
-        "print(','.join(tags.color_for(n) for n in ['js','로컬ai','python','css']))"
+        "print(','.join(tags.fallback_color(n) for n in ['js','로컬ai','python','css']))"
     )
     runs = set()
     for _ in range(3):
@@ -83,7 +110,7 @@ def main() -> int:
                              text=True, encoding="utf-8")
         runs.add(out.stdout.strip())
     check(len(runs) == 1,
-          f"파이썬을 새로 띄울 때마다 색이 달라진다 (hash() 를 쓰고 있지 않은지): {runs}")
+          f"파이썬을 새로 띄울 때마다 임시 색이 달라진다 (hash() 를 쓰고 있지 않은지): {runs}")
 
     # --- 목록과 헤더에 실제로 반영되는가 ---------------------------------
     app = QApplication.instance() or QApplication(sys.argv)
@@ -101,7 +128,7 @@ def main() -> int:
 
     # 헤더: 제목 줄 전체가 태그 색
     sheet = win.header.title_input.styleSheet()
-    check(tags.color_for("로컬ai").lower() in sheet.lower(),
+    check(tags.color_of("로컬ai").lower() in sheet.lower(),
           f"헤더 제목에 태그 색이 안 들어갔다: {sheet!r}")
 
     win.go_to(_dt.date(2026, 11, 10))
@@ -122,7 +149,7 @@ def main() -> int:
             check(span.start == start and span.length == end - start,
                   f"{item.text()!r}: 색 구간 위치가 다르다")
             check(span.format.foreground().color().name().lower()
-                  == tags.color_for(name).lower(),
+                  == tags.color_of(name).lower(),
                   f"{item.text()!r}: 색이 다르다")
 
     # --- 태그를 굵게 해도 제목이 잘리면 안 된다 --------------------------
@@ -144,10 +171,6 @@ def main() -> int:
         return 1
     print("OK - 태그 색이 안정적이고 목록·헤더에 반영된다")
     return 0
-
-
-def theme_palette() -> set[str]:
-    return set(tags.TAG_COLORS)
 
 
 if __name__ == "__main__":
