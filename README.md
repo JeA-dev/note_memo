@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img alt="version 1.0.0" src="https://img.shields.io/badge/version-1.0.0-8C6A4A">
+  <img alt="version 1.1.0" src="https://img.shields.io/badge/version-1.1.0-8C6A4A">
   <img alt="platform: Windows 10/11" src="https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4">
   <img alt="Python 3.10+" src="https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white">
   <img alt="PySide6 6.7+" src="https://img.shields.io/badge/PySide6-6.7+-41CD52?logo=qt&logoColor=white">
@@ -403,7 +403,7 @@ $env:QT_QPA_PLATFORM="windows"; .venv\Scripts\python.exe -m tests.preview_shot p
 | 파일 | 쓰임 |
 |---|---|
 | `dist\노트메모.exe` | 그냥 쓰거나 바로 넘길 때 |
-| `dist\NoteMemo-v1.0.0-win64.exe` | **릴리스에 올릴 파일** |
+| `dist\NoteMemo-v<버전>-win64.exe` | **릴리스에 올릴 파일** |
 
 > 릴리스용 파일 이름이 영문인 이유: 깃허브는 릴리스 첨부 파일명에서 **한글을 통째로 지웁니다.**
 > `노트메모-v1.0.0.exe` 를 올리면 받는 쪽에는 `-v1.0.0.exe` 로 보입니다.
